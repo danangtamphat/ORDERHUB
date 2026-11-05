@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { pool } from './db/pool.js';
 
 const app = express();
@@ -130,7 +131,7 @@ app.get('/api/reports/orders.csv',asyncRoute(async(req,res)=>{
   const esc=(s:unknown)=>`"${String(s??'').replaceAll('"','""')}"`;const csv=['Tên nhân viên,Mã vận đơn,Giá trị (VNĐ),Trạng thái,Trạng thái hóa đơn,Ngày tạo',...rows.map(r=>[r.name,r.tracking_code,r.amount_vnd,r.status,r.invoice_status,new Date(r.created_at).toLocaleDateString('sv-SE')].map(esc).join(','))].join('\r\n');
   res.setHeader('Content-Type','text/csv; charset=utf-8');res.setHeader('Content-Disposition',`attachment; filename="OrderHub-${new Date().toISOString().slice(0,10)}.csv"`);res.send('\uFEFF'+csv);
 }));
-const clientDist = path.resolve(process.cwd(), 'client/dist');
+const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../client/dist');
 app.use(express.static(clientDist));
 app.get('*',(req,res,next)=>{
   if (req.path.startsWith('/api/')) return next();
