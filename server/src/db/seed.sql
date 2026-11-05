@@ -1,0 +1,1 @@
+-- Seed script is implemented in seed.ts so bootstrap credentials stay in environment variables.

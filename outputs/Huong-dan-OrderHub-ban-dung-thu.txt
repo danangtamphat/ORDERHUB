@@ -1,0 +1,55 @@
+QUẢN LÝ CÔNG VIỆC – TÂM PHÁT (giao diện theo qldh2.html)
+
+MỞ WEBSITE
+1. Mở OrderHub-ban-dung-thu.html bằng Chrome hoặc Microsoft Edge.
+2. Cần Internet để tải biểu tượng, biểu đồ và thư viện xuất Excel/PDF.
+3. Đăng nhập bằng một tài khoản thử nghiệm:
+   Admin:   TAMPHAT  /  123456a@
+   Manager: manager1 / 123456
+   Staff:   staff1   / 123456
+   Staff:   staff2   / 123456
+- Thanh tiêu đề hiển thị thứ, ngày/tháng/năm và giờ:phút:giây theo giờ Việt Nam; đồng hồ cập nhật mỗi giây. Câu ngắn ngẫu nhiên về tài chính, kinh doanh hoặc quản lý chi tiêu được căn giữa bên dưới đồng hồ/tài khoản và đổi khi đăng nhập lại.
+
+MẬT KHẨU
+- Không có yêu cầu mật khẩu tối thiểu 10 ký tự.
+- Mật khẩu vẫn là trường bắt buộc khi đăng nhập/tạo tài khoản.
+- Cột Doanh thu hiển thị phần của từng người; khi chia không hết đến đồng, phần dư được cộng cho người đầu tiên để tổng phần chia khớp giá trị đơn.
+- Doanh thu phân bổ theo nhân viên được cộng vào thống kê, biểu đồ và bảng tổng hợp Excel; tổng giá trị đơn gốc vẫn được giữ riêng.
+- Mục Người dùng cho phép Admin gắn email khôi phục cho tài khoản.
+- Admin có thể xóa tài khoản khác bằng nút Xóa tài khoản; cần xác nhận thao tác và nhập đúng mật khẩu Admin. Không thể tự xóa tài khoản đang đăng nhập. Đơn hàng lịch sử được giữ lại.
+- Màn hình Quên mật khẩu đã có giao diện email/OTP/đặt mật khẩu mới. Gửi và xác minh OTP thật chưa hoạt động trong file HTML cục bộ vì cần máy chủ email và API xác minh.
+
+PHÂN QUYỀN
+- Admin: toàn quyền, gồm tạo tài khoản và xóa đơn.
+- Manager: xem/sửa toàn bộ đơn, không xóa; chỉ xem danh sách người dùng; báo cáo và bảng lương không cho xem dữ liệu của nhân viên khác.
+- Staff: chỉ xem, sửa, xóa đơn của mình; tạo đơn với tên tự gán.
+- Bảng Đơn hàng có thể lọc đồng thời theo nhân viên, trạng thái đơn và trạng thái xuất hóa đơn. Admin/Manager chọn nhân viên; Staff chỉ lọc trong các đơn của mình.
+- Staff/Manager thấy lưu ý dưới bảng đơn hàng: ghi doanh thu đúng, đủ và không ghi nhận ngoài giờ làm theo lịch được phân công.
+- Admin, Manager và Staff có nút Đối soát Excel trong tab Đơn hàng. Chọn tệp Excel Viettel Post; hệ thống tự tìm hàng tiêu đề và đọc chính xác hai cột Mã Vận Đơn, Trạng Thái (các cột COD/thanh toán khác không dùng). Xem trước danh sách thay đổi rồi bấm Cập nhật đơn. Trạng thái giao/phát thành công chuyển thành Giao thành công; trạng thái hoàn/trả chuyển thành Hoàn trả; các trạng thái khác chuyển thành Chờ xử lý. Mã không khớp, mã bị trùng trong hệ thống, cùng mã có trạng thái xung đột trong tệp và dòng thiếu dữ liệu được bỏ qua, có thống kê trong màn hình xem trước. Staff chỉ cập nhật được đơn thuộc quyền của mình. Khi chuyển sang Giao thành công, hệ thống ghi ngày giao là ngày đối soát và làm mới thưởng doanh thu ở tab Thu nhập.
+- Mục Người dùng có bảng tài khoản và ma trận quyền chi tiết của ba vai trò.
+- Tab Thông tin nhân viên: Staff và Manager tự nhập/cập nhật hồ sơ của mình; họ tên, chức vụ, ngày sinh, quê quán, CCCD (9 hoặc 12 chữ số) và ngày vào làm là bắt buộc. Các tài khoản này phải hoàn tất hồ sơ mới tiếp tục dùng chức năng khác. Admin chọn và xem hồ sơ của nhân viên, không sửa thay nhân viên. Điện thoại và địa chỉ hiện tại là thông tin bổ sung.
+- Hồ sơ nhân viên hiển thị bậc và mức lương giờ (nhân viên bậc 1/2/3 hoặc quản lý) ở phần đầu. Các thông tin được chia thành nhóm cá nhân và công việc/liên hệ để dễ theo dõi.
+- Nhân viên thấy lời khích lệ hướng tới bậc kế tiếp và mức tăng thêm 5.000 đ/giờ (40.000 đ mỗi ca 8 giờ); bậc 3 nhận lời chúc mừng và khuyến khích trao đổi cơ hội phát triển với quản lý. Tiêu chí nâng bậc do công ty/ quản lý xác nhận.
+- Tab Giao việc: Admin giao công việc theo tháng cho từng nhân viên, lọc danh sách theo từng nhân viên hoặc xem tất cả, kèm mô tả và deadline; Admin theo dõi trạng thái hoàn thành. Staff/Manager đánh dấu checkbox khi hoàn tất việc của mình và phải xác nhận thao tác. Website hiển thị số ngày còn lại; sau deadline, việc chưa được đánh dấu sẽ hiện “Chưa hoàn thành” và số ngày quá hạn; công việc quá deadline bị khóa, không thể chỉnh sửa. Deadline hiển thị dd/mm/yy. Admin có thể tải mẫu Excel và nhập danh sách giao việc; nhập Username, Tên công việc, Mô tả và Deadline dd/mm/yyyy. Các deadline trong file phải thuộc tháng đang chọn. Admin cũng có thể tạo nhắc việc hằng ngày cho từng nhân viên hoặc toàn bộ nhân viên; popup xuất hiện lúc 09:00 và 14:00 theo giờ trên máy. Nhắc được tạo sau một mốc giờ sẽ bắt đầu ở mốc nhắc tiếp theo. Khi có việc mới, nhân viên nhận popup ở góc dưới bên phải khi đang mở website hoặc lần đăng nhập tiếp theo.
+- Admin, Staff và Manager có thể chọn pet riêng cho tài khoản đang đăng nhập trong tab Thông tin nhân viên, đổi pet bất cứ lúc nào; pet vector sắc nét xuất hiện ở góc trái màn hình, nhún mình, vẫy đuôi, chớp mắt và có biểu cảm vui/thư giãn/buồn. Tâm trạng pet dựa trên các việc được giao cho tài khoản đó và hoàn thành đúng deadline hoặc đã quá deadline: vui khi tất cả việc được tính đều đúng hạn, thư giãn khi chưa có việc đến hạn hoặc tỷ lệ đúng hạn đạt từ 50%, buồn khi tỷ lệ thấp hơn 50%. Việc còn hạn chưa ảnh hưởng trạng thái. Hoàn thành đúng hạn được xác định theo ngày ghi nhận hoàn thành so với ngày deadline. Widget luôn hiển thị việc chưa hoàn thành gần deadline nhất và số ngày còn lại/quá hạn. Khi deadline hôm nay hoặc ngày mai, pet bật một popup nhắc tối đa một lần/ngày, có nút mở tab Giao việc.
+- Staff/Manager tự động được điểm danh khi đăng nhập (hoặc hoàn tất hồ sơ) tối đa một lần mỗi ngày theo giờ Việt Nam nếu ngày đó có lịch làm đã được Admin xếp hoặc nhập Excel; nếu không có lịch, hệ thống thông báo và không cộng ca hay thức ăn điểm danh. Mỗi lần điểm danh hợp lệ cộng 1 ca vào bảng lương tháng đó và cấp 1 phần thức ăn cho pet. Mỗi nhiệm vụ được nhân viên đánh dấu hoàn thành cấp 1 phần thức ăn; nhân viên có thể cho pet ăn tối đa 1 lần/ngày, thức ăn chưa dùng được giữ lại. Sau khi ăn, pet vui vẻ/phấn khích trong chốc lát. Admin có pet cá nhân nhưng điểm danh không cộng ca cho Admin. Admin có pet cá nhân nhưng điểm danh không cộng ca cho Admin.
+- Mục Thu nhập: Admin nhập/sửa và xuất lương toàn bộ nhân viên; Staff chỉ xem bảng lương gắn với username của mình; Manager không xem bảng lương nhưng xem lịch làm của mình ở phần cuối tab. Kỳ lương mặc định là tháng/năm hiện tại; tháng hiển thị bằng số 01–12. Admin thấy tổng thực nhận dự kiến của toàn bộ nhân viên trong kỳ, không bị ảnh hưởng bởi bộ lọc nhân viên. Lịch làm việc do Admin xếp theo ma trận tuần, gồm ca sáng và chiều; mỗi buổi có thể có nhiều nhân viên, nhưng mỗi nhân viên chỉ được xếp một ca mỗi ngày. Nút Lấy lịch tuần trước sao chép các ca sang tuần hiện tại, giữ ca đã có và bỏ qua các xung đột. Admin có thể nhập file Excel ma trận theo mẫu tải xuống; các ô có thể ghi nhiều Username hoặc tên tài khoản, mỗi ô ca/ngày có thể chứa nhiều username hoặc tên, ngăn cách bằng dấu phẩy hoặc xuống dòng.
+- Trong bộ lọc Báo cáo, chỉ Admin chọn được tất cả nhân viên; Manager và Staff bị giới hạn ở dữ liệu của tài khoản mình.
+
+TÍNH LƯƠNG / BẬC NHÂN VIÊN
+1. Đăng nhập Admin, mở tab Thu nhập và chọn tháng.
+2. Khi Admin tạo tài khoản Staff, chọn bậc: bậc 1 là 20.000 đ/giờ, bậc 2 là 25.000 đ/giờ, bậc 3 là 30.000 đ/giờ. Admin có thể đổi bậc tại cột Bậc / Lương giờ trong danh sách tài khoản. Tài khoản Manager có mức mặc định 40.000 đ/giờ.
+3. Nhập số ca làm trong tháng. Lương cứng tự tính theo số ca × 8 giờ × đơn giá giờ theo bậc/vai trò; có thể ghi đè bằng ô Lương cứng. Tài khoản nhân viên cũ được gán bậc 2 để giữ mức 25.000 đ/giờ trước đây.
+4. Chuyên cần 200.000 đ và ăn ca 500.000 đ được tự tính theo số ca trong tháng: từ 26 ca trở lên nhận đủ; dưới 26 ca nhận theo tỷ lệ số ca / 26 (mỗi ca thiếu giảm 1/26 của từng khoản).
+5. Tỷ lệ hoàn thành, thu nhập khác, hai khoản phạt, bảo hiểm, ứng tiền và tạm giữ/đền bù được chỉnh trực tiếp. Bảo hiểm mặc định 500.000 đ; ứng tiền và tạm giữ mặc định 0 đ. Hai khoản phạt nhập bằng VNĐ vì đặc tả chưa nêu giá trị tiền cho mỗi điểm phạt.
+6. Thưởng doanh thu tự tính bằng 1,5% phần doanh thu đã phân bổ cho nhân viên. Khi đơn được đổi sang trạng thái Giao thành công, bảng Thu nhập tự cập nhật và ghi nhận vào kỳ tháng/ngày giao hàng đó (không dùng tháng tạo đơn nếu giao ở tháng khác).
+7. Thực nhận = lương cứng × tỷ lệ hoàn thành + thưởng doanh thu + chuyên cần + ăn ca + thu nhập khác − hai khoản phạt − bảo hiểm − ứng tiền − tạm giữ/đền bù.
+8. Dùng Tải mẫu Excel để lấy biểu mẫu. Điền Username, số ca và các khoản điều chỉnh, sau đó chọn Nhập Excel. Để trống lương cứng nếu muốn hệ thống tự tính theo bậc. Dữ liệu được lưu trong trình duyệt hiện tại.
+9. Xem trước để xem tổng hợp. Admin có thể xuất Excel/PDF cho nhân viên đang chọn hoặc toàn bộ nhân viên. PDF dùng chữ không dấu để hiển thị tương thích với phông tích hợp.
+- Tài khoản Staff chỉ nhận quyền xem và chỉ được render bản ghi của chính username đó. Bản HTML chạy cục bộ lưu dữ liệu trên trình duyệt, nên chưa phải phân quyền an toàn cho nhiều máy/người dùng như máy chủ có xác thực.
+
+LƯU Ý
+- Đây là bản thử nghiệm một máy; dữ liệu lưu trong LocalStorage của trình duyệt hiện tại.
+- Hồ sơ nhân viên có thông tin cá nhân và CCCD, nên chỉ dùng dữ liệu thử nghiệm trong bản HTML này; thông tin chưa được mã hóa và chưa được đồng bộ bảo mật qua máy chủ.
+- Mẫu có mật khẩu thử nghiệm đơn giản và lưu dữ liệu cục bộ; chỉ dùng với dữ liệu giả lập, không dùng làm hệ thống bảo mật chính thức.
+- Xóa dữ liệu trình duyệt có thể làm mất đơn và tài khoản đã lưu. Bản này hỗ trợ xuất Excel/PDF để sao lưu báo cáo.
