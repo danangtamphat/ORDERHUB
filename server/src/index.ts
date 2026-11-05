@@ -6,11 +6,13 @@ import cors from 'cors';
 import helmet from 'helmet';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import path from 'node:path';
 import { pool } from './db/pool.js';
 
 const app = express();
 const PgStore = connectPgSimple(session);
 const prod = process.env.NODE_ENV === 'production';
+if (prod) app.set('trust proxy', 1);
 if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) throw new Error('SESSION_SECRET must contain at least 32 characters');
 app.disable('x-powered-by');
 app.use(helmet());
@@ -128,5 +130,11 @@ app.get('/api/reports/orders.csv',asyncRoute(async(req,res)=>{
   const esc=(s:unknown)=>`"${String(s??'').replaceAll('"','""')}"`;const csv=['Tên nhân viên,Mã vận đơn,Giá trị (VNĐ),Trạng thái,Trạng thái hóa đơn,Ngày tạo',...rows.map(r=>[r.name,r.tracking_code,r.amount_vnd,r.status,r.invoice_status,new Date(r.created_at).toLocaleDateString('sv-SE')].map(esc).join(','))].join('\r\n');
   res.setHeader('Content-Type','text/csv; charset=utf-8');res.setHeader('Content-Disposition',`attachment; filename="OrderHub-${new Date().toISOString().slice(0,10)}.csv"`);res.send('\uFEFF'+csv);
 }));
+const clientDist = path.resolve(process.cwd(), 'client/dist');
+app.use(express.static(clientDist));
+app.get('*',(req,res,next)=>{
+  if (req.path.startsWith('/api/')) return next();
+  res.sendFile(path.join(clientDist, 'index.html'), err => { if (err) next(err); });
+});
 app.use((err:Error&{status?:number},_req:Request,res:Response,_next:NextFunction)=>{console.error(err);res.status(err.status||500).json({error:prod?'Đã xảy ra lỗi hệ thống.':err.message});});
-const port=Number(process.env.PORT||4000);app.listen(port,'127.0.0.1',()=>console.log(`OrderHub API listening on http://127.0.0.1:${port}`));
+const port=Number(process.env.PORT||4000);const host=process.env.HOST||'0.0.0.0';app.listen(port,host,()=>console.log(`OrderHub listening on ${host}:${port}`));
