@@ -20,9 +20,10 @@ CREATE TABLE IF NOT EXISTS orders (
   share_group_id uuid,
   created_by uuid NOT NULL REFERENCES users(id),
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (owner_user_id, lower(tracking_code))
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX IF NOT EXISTS orders_owner_tracking_code_idx
+  ON orders(owner_user_id, lower(tracking_code));
 CREATE INDEX IF NOT EXISTS orders_created_at_idx ON orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS orders_owner_idx ON orders(owner_user_id);
 CREATE TABLE IF NOT EXISTS salary_runs (
