@@ -150,7 +150,22 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   sku citext NOT NULL UNIQUE,
   name text NOT NULL,
+  unit text NOT NULL DEFAULT 'cái',
   quantity numeric(14,3) NOT NULL DEFAULT 0 CHECK (quantity >= 0),
   reorder_level numeric(14,3) NOT NULL DEFAULT 0 CHECK (reorder_level >= 0),
+  unit_cost_vnd bigint NOT NULL DEFAULT 0 CHECK (unit_cost_vnd >= 0),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS unit_cost_vnd bigint NOT NULL DEFAULT 0 CHECK (unit_cost_vnd >= 0);
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS unit text NOT NULL DEFAULT 'cái';
+CREATE TABLE IF NOT EXISTS inventory_movements (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_id uuid NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+  movement_type text NOT NULL CHECK (movement_type IN ('inbound','sold','waste')),
+  quantity numeric(14,3) NOT NULL CHECK (quantity > 0),
+  unit_cost_vnd bigint,
+  note text NOT NULL DEFAULT '',
+  created_by uuid NOT NULL REFERENCES users(id),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS inventory_movements_item_created_idx ON inventory_movements(item_id,created_at DESC);
