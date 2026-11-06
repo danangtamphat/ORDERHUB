@@ -45,7 +45,7 @@ UPDATE orders SET delivered_at=updated_at WHERE status='delivered' AND delivered
 CREATE TABLE IF NOT EXISTS assigned_tasks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   assignee_user_id uuid NOT NULL REFERENCES users(id),
-  work_type text NOT NULL DEFAULT 'general',
+  work_type text NOT NULL DEFAULT 'Công việc chung',
   title text NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
   description text NOT NULL DEFAULT '',
   deadline date NOT NULL,
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS assigned_tasks (
   created_by uuid NOT NULL REFERENCES users(id),
   created_at timestamptz NOT NULL DEFAULT now()
 );
-ALTER TABLE assigned_tasks ADD COLUMN IF NOT EXISTS work_type text NOT NULL DEFAULT 'general';
+ALTER TABLE assigned_tasks ADD COLUMN IF NOT EXISTS work_type text NOT NULL DEFAULT 'Công việc chung';
 CREATE INDEX IF NOT EXISTS assigned_tasks_assignee_deadline_idx ON assigned_tasks(assignee_user_id, deadline);
 CREATE TABLE IF NOT EXISTS work_schedules (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS payroll_adjustments (
   period_start date NOT NULL,
   work_shifts_override integer CHECK (work_shifts_override >= 0),
   base_override_vnd bigint,
-  completion_rate numeric(5,2) NOT NULL DEFAULT 100 CHECK (completion_rate BETWEEN 0 AND 300),
+  completion_rate numeric(8,2) NOT NULL DEFAULT 100 CHECK (completion_rate BETWEEN 0 AND 200000),
   other_income_vnd bigint NOT NULL DEFAULT 0,
   late_penalty_vnd bigint NOT NULL DEFAULT 0,
   loss_penalty_vnd bigint NOT NULL DEFAULT 0,
@@ -128,6 +128,9 @@ CREATE TABLE IF NOT EXISTS payroll_adjustments (
   PRIMARY KEY(user_id,period_start)
 );
 ALTER TABLE payroll_adjustments ADD COLUMN IF NOT EXISTS work_shifts_override integer CHECK (work_shifts_override >= 0);
+ALTER TABLE payroll_adjustments ALTER COLUMN completion_rate TYPE numeric(8,2);
+ALTER TABLE payroll_adjustments DROP CONSTRAINT IF EXISTS payroll_adjustments_completion_rate_check;
+ALTER TABLE payroll_adjustments ADD CONSTRAINT payroll_adjustments_completion_rate_check CHECK (completion_rate BETWEEN 0 AND 200000);
 ALTER TABLE payroll_adjustments ALTER COLUMN insurance_vnd SET DEFAULT 0;
 ALTER TABLE payroll_adjustments ADD COLUMN IF NOT EXISTS insurance_default_migrated boolean NOT NULL DEFAULT false;
 UPDATE payroll_adjustments SET insurance_vnd=0,insurance_default_migrated=true WHERE insurance_default_migrated=false AND insurance_vnd=500000;
