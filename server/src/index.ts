@@ -131,13 +131,14 @@ app.put('/api/profile',asyncRoute(async(req,res)=>{
 }));
 app.get('/api/orders',asyncRoute(async(req,res)=>{
   if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});
-  const {q='',status='',invoiceStatus='',userId=''}=req.query as Record<string,string>;
+  const {q='',status='',invoiceStatus='',userId='',createdDate=''}=req.query as Record<string,string>;
   const vals:unknown[]=[];const where:string[]=[];const u=req.session.user;
   if(u.role==='staff'){vals.push(u.id);where.push(`o.owner_user_id=$${vals.length}`)}
   else if(userId){vals.push(userId);where.push(`o.owner_user_id=$${vals.length}`)}
   if(q){vals.push(`%${q}%`);where.push(`(o.tracking_code ILIKE $${vals.length} OR usr.display_name ILIKE $${vals.length})`)}
   if(status){vals.push(status);where.push(`o.status=$${vals.length}`)}
   if(invoiceStatus){vals.push(invoiceStatus);where.push(`o.invoice_status=$${vals.length}`)}
+  if(createdDate&&/^\d{4}-\d{2}-\d{2}$/.test(createdDate)){vals.push(createdDate);where.push(`o.created_at >= ($${vals.length}::date::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh') AND o.created_at < (($${vals.length}::date + interval '1 day')::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')`)}
   const result=await pool.query(`SELECT o.id,o.tracking_code AS "trackingCode",o.amount_vnd AS "amountVnd",COALESCE((SELECT sum(part.amount_vnd) FROM orders part WHERE part.share_group_id=o.share_group_id),o.amount_vnd) AS "grossAmountVnd",o.status,o.invoice_status AS "invoiceStatus",o.owner_user_id AS "ownerUserId",usr.display_name AS "ownerName",COALESCE(ps.pet_type,'cat') AS "ownerPetType",o.share_group_id AS "shareGroupId",o.created_at AS "createdAt" FROM orders o JOIN users usr ON usr.id=o.owner_user_id LEFT JOIN pet_settings ps ON ps.user_id=o.owner_user_id ${where.length?'WHERE '+where.join(' AND '):''} ORDER BY o.created_at DESC`,vals);res.json({orders:result.rows});
 }));
 app.get('/api/orders/duplicates',asyncRoute(async(req,res)=>{

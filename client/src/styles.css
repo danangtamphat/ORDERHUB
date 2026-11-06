@@ -68,3 +68,5 @@
 .orders-panel table thead th{font-size:17px!important;font-weight:750!important}
 .orders-panel .row-actions{gap:8px}.orders-panel .row-actions .small-action{padding:4px 6px;font-size:18px!important;font-weight:800!important;line-height:1.2}.tracking-code-wrap{display:inline-flex;align-items:center;gap:6px}.tracking-copy{display:inline-grid;place-items:center;width:26px;height:26px;padding:0;border:1px solid #dbe4f1;border-radius:6px;background:#f7f9fc;color:#5268e8;vertical-align:middle}.tracking-copy:hover{border-color:#9aacef;background:#edf2ff}.tracking-copy:active{transform:scale(.95)}
 .share-pet{margin-left:4px;font-size:16px;vertical-align:-1px}
+
+.orders-date-filter{display:flex;align-items:center;gap:7px;white-space:nowrap;color:#697589;font-size:12px;font-weight:600}.orders-date-filter input{height:36px;min-width:145px;padding:0 9px;border:1px solid #e5e8ee;border-radius:7px;background:#fff;color:#354158;font-size:13px}
