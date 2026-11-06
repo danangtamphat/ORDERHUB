@@ -86,10 +86,10 @@ app.get('/api/users',roles('admin','manager'),asyncRoute(async(_req,res)=>{
   const {rows}=await pool.query('SELECT id,username,display_name AS "displayName",role,active,recovery_email AS "recoveryEmail",employee_grade AS "employeeGrade",created_at AS "createdAt" FROM users ORDER BY display_name');res.json({users:rows});
 }));
 app.post('/api/users',roles('admin'),asyncRoute(async(req,res)=>{
-  const b=z.object({username:z.string().trim().min(3).max(40),displayName:z.string().trim().min(1).max(100),password:z.string().min(8).max(128),role:z.enum(['manager','staff']),recoveryEmail:z.union([z.string().email().max(254),z.literal('')]).optional(),employeeGrade:z.number().int().min(1).max(3).default(2)}).safeParse(req.body);
-  if(!b.success)return res.status(400).json({error:'Thông tin không hợp lệ. Mật khẩu cần ít nhất 8 ký tự và email phải đúng định dạng.'});
-  const {username,displayName,password,role,recoveryEmail,employeeGrade}=b.data;
-  const result=await pool.query(`INSERT INTO users(username,display_name,password_hash,role,must_change_password,recovery_email,employee_grade) VALUES($1,$2,$3,$4,true,NULLIF($5,''),$6) RETURNING id,username,display_name AS "displayName",role,active,recovery_email AS "recoveryEmail",employee_grade AS "employeeGrade"`,[username,displayName,await bcrypt.hash(password,12),role,recoveryEmail||'',role==='staff'?employeeGrade:2]);res.status(201).json({user:result.rows[0]});
+  const b=z.object({username:z.string().trim().min(3).max(40),displayName:z.string().trim().min(1).max(100),password:z.string().min(8).max(128),role:z.enum(['manager','staff']),employeeGrade:z.number().int().min(1).max(3).default(2)}).safeParse(req.body);
+  if(!b.success)return res.status(400).json({error:'Thông tin không hợp lệ. Mật khẩu cần ít nhất 8 ký tự.'});
+  const {username,displayName,password,role,employeeGrade}=b.data;
+  const result=await pool.query(`INSERT INTO users(username,display_name,password_hash,role,must_change_password,employee_grade) VALUES($1,$2,$3,$4,true,$5) RETURNING id,username,display_name AS "displayName",role,active,recovery_email AS "recoveryEmail",employee_grade AS "employeeGrade"`,[username,displayName,await bcrypt.hash(password,12),role,role==='staff'?employeeGrade:2]);res.status(201).json({user:result.rows[0]});
 }));
 app.patch('/api/users/:id/role',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({role:z.enum(['manager','staff']),adminPassword:z.string().min(1)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Thông tin không hợp lệ.'});
@@ -98,8 +98,8 @@ app.patch('/api/users/:id/role',roles('admin'),asyncRoute(async(req,res)=>{
   const {rows}=await pool.query('UPDATE users SET role=$1 WHERE id=$2 AND role<>\'admin\' RETURNING id,username,role',[b.data.role,req.params.id]);if(!rows[0])return res.status(404).json({error:'Không tìm thấy tài khoản.'});res.json({user:rows[0]});
 }));
 app.patch('/api/users/:id/settings',roles('admin'),asyncRoute(async(req,res)=>{
-  const b=z.object({recoveryEmail:z.union([z.string().email().max(254),z.literal('')]),employeeGrade:z.number().int().min(1).max(3)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Email hoặc bậc nhân viên không hợp lệ.'});
-  const {rows}=await pool.query(`UPDATE users SET recovery_email=NULLIF($1,''),employee_grade=CASE WHEN role='staff' THEN $2 ELSE employee_grade END WHERE id=$3 AND (role<>'admin' OR id=$4) RETURNING id,username,employee_grade AS "employeeGrade",recovery_email AS "recoveryEmail"`,[b.data.recoveryEmail,b.data.employeeGrade,req.params.id,req.session.user!.id]);if(!rows[0])return res.status(404).json({error:'Không tìm thấy tài khoản.'});res.json({user:rows[0]});
+  const b=z.object({employeeGrade:z.number().int().min(1).max(3)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Bậc nhân viên không hợp lệ.'});
+  const {rows}=await pool.query(`UPDATE users SET employee_grade=CASE WHEN role='staff' THEN $1 ELSE employee_grade END WHERE id=$2 AND (role<>'admin' OR id=$3) RETURNING id,username,employee_grade AS "employeeGrade",recovery_email AS "recoveryEmail"`,[b.data.employeeGrade,req.params.id,req.session.user!.id]);if(!rows[0])return res.status(404).json({error:'Không tìm thấy tài khoản.'});res.json({user:rows[0]});
 }));
 app.post('/api/users/:id/reset-password',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({adminPassword:z.string().min(1)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Nhập mật khẩu Admin để xác nhận.'});
