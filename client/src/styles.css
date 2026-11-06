@@ -64,3 +64,4 @@
 .schedule-panel.employee .schedule-names{gap:4px}
 .schedule-panel.employee .schedule-names span{padding:5px 7px}
 @media(max-width:680px){.schedule-panel.employee .schedule-row{min-height:54px}}
+.orders-panel table thead th{font-size:17px!important;font-weight:750!important}
