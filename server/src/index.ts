@@ -137,7 +137,7 @@ app.get('/api/orders',asyncRoute(async(req,res)=>{
   if(q){vals.push(`%${q}%`);where.push(`(o.tracking_code ILIKE $${vals.length} OR usr.display_name ILIKE $${vals.length})`)}
   if(status){vals.push(status);where.push(`o.status=$${vals.length}`)}
   if(invoiceStatus){vals.push(invoiceStatus);where.push(`o.invoice_status=$${vals.length}`)}
-  const result=await pool.query(`SELECT o.id,o.tracking_code AS "trackingCode",o.amount_vnd AS "amountVnd",COALESCE((SELECT sum(part.amount_vnd) FROM orders part WHERE part.share_group_id=o.share_group_id),o.amount_vnd) AS "grossAmountVnd",o.status,o.invoice_status AS "invoiceStatus",o.owner_user_id AS "ownerUserId",usr.display_name AS "ownerName",o.share_group_id AS "shareGroupId",o.created_at AS "createdAt" FROM orders o JOIN users usr ON usr.id=o.owner_user_id ${where.length?'WHERE '+where.join(' AND '):''} ORDER BY o.created_at DESC`,vals);res.json({orders:result.rows});
+  const result=await pool.query(`SELECT o.id,o.tracking_code AS "trackingCode",o.amount_vnd AS "amountVnd",COALESCE((SELECT sum(part.amount_vnd) FROM orders part WHERE part.share_group_id=o.share_group_id),o.amount_vnd) AS "grossAmountVnd",o.status,o.invoice_status AS "invoiceStatus",o.owner_user_id AS "ownerUserId",usr.display_name AS "ownerName",COALESCE(ps.pet_type,'cat') AS "ownerPetType",o.share_group_id AS "shareGroupId",o.created_at AS "createdAt" FROM orders o JOIN users usr ON usr.id=o.owner_user_id LEFT JOIN pet_settings ps ON ps.user_id=o.owner_user_id ${where.length?'WHERE '+where.join(' AND '):''} ORDER BY o.created_at DESC`,vals);res.json({orders:result.rows});
 }));
 app.post('/api/orders',asyncRoute(async(req,res)=>{
   if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});
