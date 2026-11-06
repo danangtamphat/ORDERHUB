@@ -197,6 +197,14 @@ app.get('/api/schedules',asyncRoute(async(req,res)=>{
   if(/^\d{1,2}$/.test(month)&&/^\d{4}$/.test(year)){args.push(`${year}-${month.padStart(2,'0')}-01`);where.push(`s.work_date >= $${args.length}::date AND s.work_date < ($${args.length}::date + interval '1 month')`)}
   const {rows}=await pool.query(`SELECT s.id,s.user_id AS "userId",u.username,u.display_name AS "displayName",to_char(s.work_date,'YYYY-MM-DD') AS "workDate",s.shift,(a.id IS NOT NULL) AS attended FROM work_schedules s JOIN users u ON u.id=s.user_id LEFT JOIN attendance a ON a.user_id=s.user_id AND a.work_date=s.work_date ${where.length?'WHERE '+where.join(' AND '):''} ORDER BY s.work_date,s.shift,u.display_name`,args);res.json({schedules:rows});
 }));
+app.put('/api/schedules/import',roles('admin'),asyncRoute(async(req,res)=>{
+  const dateSchema=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v=>{const d=new Date(`${v}T00:00:00Z`);return !Number.isNaN(d.getTime())&&d.toISOString().slice(0,10)===v});
+  const b=z.object({entries:z.array(z.object({workDate:dateSchema,shift:z.enum(['morning','afternoon']),userIds:z.array(z.string().uuid()).max(20)})).max(70)}).safeParse(req.body);
+  if(!b.success)return res.status(400).json({error:'Dữ liệu lịch Excel không hợp lệ.'});
+  const assigned=new Set<string>();for(const entry of b.data.entries)for(const id of entry.userIds){const key=`${entry.workDate}|${id}`;if(assigned.has(key))return res.status(400).json({error:'Một nhân viên đang được xếp hai ca trong cùng ngày. Hãy sửa lịch Excel rồi nhập lại.'});assigned.add(key)}
+  const ids=[...new Set(b.data.entries.flatMap(e=>e.userIds))];if(ids.length){const people=await pool.query("SELECT id FROM users WHERE id=ANY($1::uuid[]) AND active=true AND role IN ('staff','manager')",[ids]);if(people.rows.length!==ids.length)return res.status(400).json({error:'Tệp có nhân viên không tồn tại hoặc tài khoản đã bị khóa.'})}
+  const client=await pool.connect();try{await client.query('BEGIN');for(const entry of b.data.entries)for(const id of entry.userIds)await client.query(`INSERT INTO work_schedules(user_id,work_date,shift,created_by) VALUES($1,$2::date,$3,$4) ON CONFLICT(user_id,work_date) DO UPDATE SET shift=EXCLUDED.shift,created_by=EXCLUDED.created_by`,[id,entry.workDate,entry.shift,req.session.user!.id]);await client.query('COMMIT');res.json({assigned:assigned.size,slots:b.data.entries.length})}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
+}));
 app.put('/api/schedules',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({userIds:z.array(z.string().uuid()).max(20),workDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),shift:z.enum(['morning','afternoon'])}).safeParse(req.body);
   if(!b.success)return res.status(400).json({error:'Lịch làm việc không hợp lệ.'});
