@@ -113,13 +113,14 @@ CREATE TABLE IF NOT EXISTS payroll_adjustments (
   other_income_vnd bigint NOT NULL DEFAULT 0,
   late_penalty_vnd bigint NOT NULL DEFAULT 0,
   loss_penalty_vnd bigint NOT NULL DEFAULT 0,
-  insurance_vnd bigint NOT NULL DEFAULT 500000,
+  insurance_vnd bigint NOT NULL DEFAULT 0,
   advance_vnd bigint NOT NULL DEFAULT 0,
   holdback_vnd bigint NOT NULL DEFAULT 0,
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(user_id,period_start)
 );
 ALTER TABLE payroll_adjustments ADD COLUMN IF NOT EXISTS work_shifts_override integer CHECK (work_shifts_override >= 0);
+ALTER TABLE payroll_adjustments ALTER COLUMN insurance_vnd SET DEFAULT 0;
 CREATE TABLE IF NOT EXISTS salary_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   period_start date NOT NULL,
