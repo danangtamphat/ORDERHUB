@@ -75,3 +75,5 @@
 .completion-penalty{display:block;margin-top:4px;color:#b45309;font-size:12px;font-weight:650}.task-bulk-toolbar{flex-wrap:wrap}
 
 .task-review-panel{border-color:#a9c2ff;background:#f8faff}.task-review-panel h3{margin:0 0 12px;color:#244fba}.task-review-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #e3eaf5}.task-review-row>span{flex:1}.task-review-row small{display:block;margin-top:4px;color:#71809a}.task-review-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.task-review-toast{border-color:#8fb0ff;background:#f4f7ff}.task-review-toast>b{color:#244fba}.task-review-toast .task-review-actions{margin-top:8px}
+
+.task-approval-disabled{opacity:.62;cursor:not-allowed}.task-approved-label{display:inline-flex;align-items:center;padding:5px 8px;border-radius:8px;background:#d6f7e8;color:#087548;font-size:12px;font-weight:650}.task-list-panel td .task-review-actions{min-width:150px}
