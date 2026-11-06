@@ -25,15 +25,19 @@ Máy chủ và các máy nhân viên cần cùng mạng Wi-Fi/LAN. Trên máy ch
 
 Nếu máy khác không vào được, kiểm tra các máy cùng Wi-Fi/LAN, mạng Windows của máy chủ đang đặt là Riêng tư, và Windows Firewall cho phép cổng TCP `5173` trên mạng Riêng tư. Có thể dùng địa chỉ IP cố định hoặc đặt DHCP reservation trên router để địa chỉ máy chủ không đổi. Đóng hai cửa sổ máy chủ API/Web để tắt OrderHub.
 
-Đây là chế độ chạy thử trong mạng tin cậy, chưa có HTTPS. Bản HTML trong `outputs` vẫn lưu dữ liệu riêng trên từng trình duyệt; để dùng chung, cần mở ứng dụng React/API ở trên. Bản React hiện mới có đăng nhập, đơn hàng, người dùng và báo cáo cơ bản; các tính năng trong bản HTML như lịch ca, Thu nhập, Giao việc và pet chưa được chuyển sang bản này.
+Đây là chế độ chạy thử trong mạng tin cậy, chưa có HTTPS. Bản HTML trong `outputs` vẫn lưu dữ liệu riêng trên từng trình duyệt; để dùng chung, mở ứng dụng React/API ở trên. Các chức năng đã chuyển sang React/API gồm hồ sơ, giao việc, nhắc việc, lịch ca, điểm danh, bảng lương, pet và đối soát đơn. Các bản ghi được lưu chung trong PostgreSQL.
 
 ## Phạm vi hiện tại
 
-- Đăng nhập, phiên cookie HttpOnly, bcrypt, đổi mật khẩu, phân quyền Admin/Manager/Staff ở API.
-- Danh sách, tạo, sửa, xoá đơn; tìm kiếm/lọc; phát hiện mã vận đơn trùng không phân biệt hoa thường.
+- Đăng nhập, phiên cookie HttpOnly, bcrypt, đổi mật khẩu, OTP đặt lại mật khẩu qua Resend, phân quyền Admin/Manager/Staff ở API.
+- Danh sách, tạo, sửa, xoá đơn; lọc nhân viên/trạng thái/hóa đơn; kiểm tra trùng; đối soát trạng thái hàng loạt bằng Excel.
 - Chia doanh thu theo người nhận, mỗi người có bản ghi riêng trong cùng giao dịch. Nếu số tiền không chia hết đến từng đồng, người đầu tiên nhận phần dư để tổng phân bổ bằng giá trị gốc.
-- Bảng điều khiển, thống kê đơn, báo cáo CSV mở bằng Excel; quản lý người dùng chỉ dành cho Admin.
-- Giao diện responsive tiếng Việt. Các trang biểu đồ, tồn kho, lương được đánh dấu theo giai đoạn triển khai.
+- Hồ sơ nhân viên tự khai báo, bậc lương, phân quyền, xóa tài khoản có xác nhận mật khẩu Admin; CCCD được mã hóa trong cơ sở dữ liệu.
+- Giao việc theo tháng, hoàn thành có xác nhận, quá hạn bị khóa, nhập Excel; nhắc việc Admin tạo và popup nhân viên lúc 09:00/14:00.
+- Lịch nhiều người mỗi ca, mỗi người tối đa một ca/ngày, mẫu Excel, sao chép tuần trước, xóa lịch tuần; đăng nhập ngày có lịch sẽ ghi nhận một ca.
+- Bảng lương tính theo ca và bậc giờ, thưởng 1,5% doanh thu giao thành công, phụ cấp theo số ca; Admin điều chỉnh và xuất Excel/PDF. Nhân viên chỉ xem lương của mình; Manager chỉ xem lịch.
+- Pet riêng theo tài khoản; thức ăn từ điểm danh và hoàn tất việc, cho ăn một lần mỗi ngày.
+- Bảng điều khiển, biểu đồ, báo cáo có lọc ngày/trạng thái/nhân viên và xuất Excel/PDF.
 
 ## Quy tắc đã chốt từ đặc tả mâu thuẫn
 
@@ -41,11 +45,11 @@ Nếu máy khác không vào được, kiểm tra các máy cùng Wi-Fi/LAN, m�
 - Chia doanh thu đều giữa chủ đơn và các Staff được chọn; Admin không nhận phần chia. Manager có thể là chủ đơn, nhưng không phải đối tượng nhận chia theo quy tắc bảo thủ này.
 - Trạng thái hoá đơn là trường độc lập (chưa xuất/đã xuất), không tự suy ra từ trạng thái giao hàng.
 - Mã vận đơn duy nhất không phân biệt hoa thường trong phạm vi từng nhân viên nhận doanh thu. Đây là cách hỗ trợ chia đơn mà không cho cùng nhân viên ghi nhận mã hai lần.
-- Tính lương và tồn kho chưa được triển khai trong bản nền; cần chốt cách nhập ca, đơn vị tồn kho, và cách tính “điểm phạt” trước khi bật tính năng tài chính.
+- “Điểm phạt” được nhập bằng VNĐ do đặc tả chưa quy đổi điểm sang tiền. Chưa có module quản lý tồn kho trong yêu cầu giao diện hiện tại.
 
 ## Kiểm thử
 
-Chạy `npm run build` để kiểm tra biên dịch. Khởi động PostgreSQL trước khi chạy migration/seed và `npm run dev`. Dữ liệu mẫu chỉ được thêm nếu đặt `SEED_DEMO=true`; mặc định không tự sinh đơn hàng giả. Bản hiện tại xuất CSV UTF-8 tương thích Excel; chưa có XLSX nhiều sheet hay PDF. Chưa có đăng nhập quên mật khẩu/email.
+Chạy `npm run build` để kiểm tra biên dịch. Khởi động PostgreSQL trước khi chạy migration/seed và `npm run dev`. Dữ liệu mẫu chỉ được thêm nếu đặt `SEED_DEMO=true`; mặc định không tự sinh đơn hàng giả. Để gửi OTP thật, cấu hình `RESEND_API_KEY` và `RESEND_FROM_EMAIL` bằng domain đã xác minh trong Resend. Không đưa khóa gửi thư hoặc khóa mã hóa thật vào Git.
 
 ## An toàn
 

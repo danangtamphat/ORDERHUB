@@ -10,6 +10,20 @@ CREATE TABLE IF NOT EXISTS users (
   must_change_password boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_email citext;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_grade smallint NOT NULL DEFAULT 2 CHECK (employee_grade BETWEEN 1 AND 3);
+CREATE TABLE IF NOT EXISTS employee_profiles (
+  user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  full_name text NOT NULL,
+  birth_date date NOT NULL,
+  hometown text NOT NULL,
+  national_id_ciphertext bytea NOT NULL,
+  position text NOT NULL,
+  start_date date NOT NULL,
+  phone text NOT NULL DEFAULT '',
+  address text NOT NULL DEFAULT '',
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS orders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tracking_code text NOT NULL,
@@ -26,6 +40,84 @@ CREATE UNIQUE INDEX IF NOT EXISTS orders_owner_tracking_code_idx
   ON orders(owner_user_id, lower(tracking_code));
 CREATE INDEX IF NOT EXISTS orders_created_at_idx ON orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS orders_owner_idx ON orders(owner_user_id);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at timestamptz;
+UPDATE orders SET delivered_at=updated_at WHERE status='delivered' AND delivered_at IS NULL;
+CREATE TABLE IF NOT EXISTS assigned_tasks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  assignee_user_id uuid NOT NULL REFERENCES users(id),
+  title text NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
+  description text NOT NULL DEFAULT '',
+  deadline date NOT NULL,
+  completed_at timestamptz,
+  created_by uuid NOT NULL REFERENCES users(id),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS assigned_tasks_assignee_deadline_idx ON assigned_tasks(assignee_user_id, deadline);
+CREATE TABLE IF NOT EXISTS work_schedules (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id),
+  work_date date NOT NULL,
+  shift text NOT NULL CHECK (shift IN ('morning','afternoon')),
+  created_by uuid NOT NULL REFERENCES users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(user_id,work_date)
+);
+CREATE INDEX IF NOT EXISTS work_schedules_date_idx ON work_schedules(work_date,shift);
+CREATE TABLE IF NOT EXISTS attendance (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id),
+  work_date date NOT NULL,
+  shift text NOT NULL CHECK (shift IN ('morning','afternoon')),
+  checked_in_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(user_id,work_date)
+);
+CREATE TABLE IF NOT EXISTS pet_settings (
+  user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  pet_type text NOT NULL DEFAULT 'cat' CHECK (pet_type IN ('cat','dog','rabbit','panda','fox','frog','bear','unicorn')),
+  food_count integer NOT NULL DEFAULT 0 CHECK (food_count >= 0),
+  fed_date date,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS daily_reminders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES users(id) ON DELETE CASCADE,
+  title text NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
+  description text NOT NULL DEFAULT '',
+  created_by uuid NOT NULL REFERENCES users(id),
+  active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS reminder_prompts (
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  prompt_date date NOT NULL,
+  slot text NOT NULL CHECK (slot IN ('09','14')),
+  shown_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(user_id,prompt_date,slot)
+);
+CREATE TABLE IF NOT EXISTS password_reset_codes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  otp_hash text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  attempts smallint NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 5),
+  used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS password_reset_user_created_idx ON password_reset_codes(user_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS payroll_adjustments (
+  user_id uuid NOT NULL REFERENCES users(id),
+  period_start date NOT NULL,
+  base_override_vnd bigint,
+  completion_rate numeric(5,2) NOT NULL DEFAULT 100 CHECK (completion_rate BETWEEN 0 AND 300),
+  other_income_vnd bigint NOT NULL DEFAULT 0,
+  late_penalty_vnd bigint NOT NULL DEFAULT 0,
+  loss_penalty_vnd bigint NOT NULL DEFAULT 0,
+  insurance_vnd bigint NOT NULL DEFAULT 500000,
+  advance_vnd bigint NOT NULL DEFAULT 0,
+  holdback_vnd bigint NOT NULL DEFAULT 0,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(user_id,period_start)
+);
 CREATE TABLE IF NOT EXISTS salary_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   period_start date NOT NULL,
