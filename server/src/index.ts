@@ -192,7 +192,7 @@ app.get('/api/tasks',asyncRoute(async(req,res)=>{
   if(actor.role!=='admin'){args.push(actor.id);where.push(`t.assignee_user_id=$${args.length}`)}
   else if(userId){args.push(userId);where.push(`t.assignee_user_id=$${args.length}`)}
   if(month&&year){args.push(`${year}-${month.padStart(2,'0')}-01`);where.push(`date_trunc('month',t.deadline)=$${args.length}::date`)}
-  const {rows}=await pool.query(`SELECT t.id,t.assignee_user_id AS "assigneeUserId",u.username AS "assigneeUsername",u.display_name AS "assigneeName",t.title,t.description,to_char(t.deadline,'YYYY-MM-DD') AS deadline,t.completed_at AS "completedAt",t.created_at AS "createdAt" FROM assigned_tasks t JOIN users u ON u.id=t.assignee_user_id ${where.length?'WHERE '+where.join(' AND '):''} ORDER BY t.deadline,t.created_at DESC`,args);
+  const {rows}=await pool.query(`SELECT t.id,t.assignee_user_id AS "assigneeUserId",u.username AS "assigneeUsername",u.display_name AS "assigneeName",t.work_type AS "workType",t.title,t.description,to_char(t.deadline,'YYYY-MM-DD') AS deadline,t.completed_at AS "completedAt",t.created_at AS "createdAt" FROM assigned_tasks t JOIN users u ON u.id=t.assignee_user_id ${where.length?'WHERE '+where.join(' AND '):''} ORDER BY t.deadline,t.created_at DESC`,args);
   res.json({tasks:rows});
 }));
 app.get('/api/schedules',asyncRoute(async(req,res)=>{
@@ -239,12 +239,19 @@ app.put('/api/payroll/:userId',roles('admin'),asyncRoute(async(req,res)=>{
   await pool.query(`INSERT INTO payroll_adjustments(user_id,period_start,work_shifts_override,base_override_vnd,completion_rate,other_income_vnd,late_penalty_vnd,loss_penalty_vnd,insurance_vnd,advance_vnd,holdback_vnd) VALUES($1,$2::date,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(user_id,period_start) DO UPDATE SET work_shifts_override=EXCLUDED.work_shifts_override,base_override_vnd=EXCLUDED.base_override_vnd,completion_rate=EXCLUDED.completion_rate,other_income_vnd=EXCLUDED.other_income_vnd,late_penalty_vnd=EXCLUDED.late_penalty_vnd,loss_penalty_vnd=EXCLUDED.loss_penalty_vnd,insurance_vnd=EXCLUDED.insurance_vnd,advance_vnd=EXCLUDED.advance_vnd,holdback_vnd=EXCLUDED.holdback_vnd,updated_at=now()`,[req.params.userId,period,p.workShiftsOverride,p.baseOverride,p.completionRate,p.otherIncome,p.latePenalty,p.lossPenalty,p.insurance,p.advance,p.holdback]);res.json({ok:true});
 }));
 app.post('/api/tasks',roles('admin'),asyncRoute(async(req,res)=>{
-  const b=z.object({assigneeUserId:z.string().uuid(),title:z.string().trim().min(1).max(160),description:z.string().max(1000).default(''),deadline:z.string().regex(/^\d{4}-\d{2}-\d{2}$/)}).safeParse(req.body);
-  if(!b.success)return res.status(400).json({error:'Vui lòng kiểm tra nhân viên, tên công việc và deadline.'});
+  const b=z.object({assigneeUserId:z.string().uuid(),workType:z.enum(['general','daily','monthly','ad_hoc']).default('general'),title:z.string().trim().min(1).max(160),description:z.string().max(1000).default(''),deadline:z.string().regex(/^\d{4}-\d{2}-\d{2}$/)}).safeParse(req.body);
+  if(!b.success)return res.status(400).json({error:'Vui lòng kiểm tra nhân viên, kiểu công việc, tên công việc và deadline.'});
   const check=await pool.query("SELECT id FROM users WHERE id=$1 AND active=true AND role IN ('staff','manager')",[b.data.assigneeUserId]);
   if(!check.rowCount)return res.status(400).json({error:'Chỉ có thể giao việc cho nhân viên hoặc quản lý đang hoạt động.'});
-  const {rows}=await pool.query(`INSERT INTO assigned_tasks(assignee_user_id,title,description,deadline,created_by) VALUES($1,$2,$3,$4::date,$5) RETURNING id,assignee_user_id AS "assigneeUserId",title,description,to_char(deadline,'YYYY-MM-DD') AS deadline,completed_at AS "completedAt"`,[b.data.assigneeUserId,b.data.title,b.data.description, b.data.deadline,req.session.user!.id]);
+  const {rows}=await pool.query(`INSERT INTO assigned_tasks(assignee_user_id,work_type,title,description,deadline,created_by) VALUES($1,$2,$3,$4,$5::date,$6) RETURNING id,assignee_user_id AS "assigneeUserId",work_type AS "workType",title,description,to_char(deadline,'YYYY-MM-DD') AS deadline,completed_at AS "completedAt"`,[b.data.assigneeUserId,b.data.workType,b.data.title,b.data.description,b.data.deadline,req.session.user!.id]);
   res.status(201).json({task:rows[0]});
+}));
+app.delete('/api/tasks/bulk',roles('admin'),asyncRoute(async(req,res)=>{
+  const b=z.object({ids:z.array(z.string().uuid()).min(1).max(1000)}).safeParse(req.body);
+  if(!b.success)return res.status(400).json({error:'Chọn từ 1 đến 1.000 công việc cần xóa.'});
+  const uniqueIds=[...new Set(b.data.ids)];
+  const {rowCount}=await pool.query('DELETE FROM assigned_tasks WHERE id=ANY($1::uuid[])',[uniqueIds]);
+  res.json({deleted:rowCount||0});
 }));
 app.patch('/api/tasks/:id/completion',asyncRoute(async(req,res)=>{
   if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});

@@ -45,6 +45,7 @@ UPDATE orders SET delivered_at=updated_at WHERE status='delivered' AND delivered
 CREATE TABLE IF NOT EXISTS assigned_tasks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   assignee_user_id uuid NOT NULL REFERENCES users(id),
+  work_type text NOT NULL DEFAULT 'general',
   title text NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
   description text NOT NULL DEFAULT '',
   deadline date NOT NULL,
@@ -52,6 +53,7 @@ CREATE TABLE IF NOT EXISTS assigned_tasks (
   created_by uuid NOT NULL REFERENCES users(id),
   created_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE assigned_tasks ADD COLUMN IF NOT EXISTS work_type text NOT NULL DEFAULT 'general';
 CREATE INDEX IF NOT EXISTS assigned_tasks_assignee_deadline_idx ON assigned_tasks(assignee_user_id, deadline);
 CREATE TABLE IF NOT EXISTS work_schedules (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
