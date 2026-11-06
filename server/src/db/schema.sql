@@ -71,6 +71,12 @@ CREATE TABLE IF NOT EXISTS attendance (
   checked_in_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(user_id,work_date)
 );
+CREATE TABLE IF NOT EXISTS daily_login_notices (
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  login_date date NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(user_id,login_date)
+);
 CREATE TABLE IF NOT EXISTS pet_settings (
   user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   pet_type text NOT NULL DEFAULT 'cat' CHECK (pet_type IN ('cat','dog','rabbit','panda','fox','frog','bear','unicorn')),
