@@ -52,3 +52,15 @@
 .pet-avatar .pet-illustration{display:block;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 2px 2px #49312220)}.pet-avatar.excited .pet-illustration{animation:pet-bounce .45s ease-in-out infinite alternate}.user-email-note{display:block;margin-top:4px;color:#8998ab;font-size:10px;font-weight:400}
 
 .attendance-banner{display:flex;align-items:flex-start;gap:10px;margin:0 0 14px;padding:13px 15px;border:1px solid;border-radius:10px;font-size:13px;font-weight:650;line-height:1.5}.attendance-banner>svg{flex:none;margin-top:1px}.attendance-banner>span{flex:1}.attendance-banner>button{display:grid;place-items:center;padding:2px;border:0;background:transparent;color:inherit;opacity:.75}.attendance-banner.success{border-color:#9ad9b6;background:#e9f8ef;color:#14764b}.attendance-banner.warning{border-color:#f3d184;background:#fff8e6;color:#915b0c}.attendance-banner.info{border-color:#b8d4f6;background:#eef6ff;color:#285e9b}
+/* Compact weekly schedule cells and keep weekday headings visible while scrolling. */
+.schedule-grid-scroll{max-height:72vh;overflow:auto;overscroll-behavior:contain}
+.schedule-days{position:sticky;top:0;z-index:20;box-shadow:0 2px 4px #233a5c12}
+.schedule-days>div{padding-top:7px;padding-bottom:7px}
+.schedule-row{min-height:54px}
+.shift-label{padding:4px}
+.schedule-cell{gap:4px;padding:5px}
+.schedule-panel.employee .schedule-row{min-height:54px}
+.schedule-panel.employee .schedule-cell{gap:4px;padding:5px}
+.schedule-panel.employee .schedule-names{gap:4px}
+.schedule-panel.employee .schedule-names span{padding:5px 7px}
+@media(max-width:680px){.schedule-panel.employee .schedule-row{min-height:54px}}
