@@ -8,7 +8,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { pool } from './db/pool.js';
 
 const app = express();
@@ -105,11 +105,9 @@ app.patch('/api/users/:id/settings',roles('admin'),asyncRoute(async(req,res)=>{
 app.post('/api/users/:id/reset-password',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({adminPassword:z.string().min(1)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Nhập mật khẩu Admin để xác nhận.'});
   const admin=(await pool.query('SELECT password_hash FROM users WHERE id=$1',[req.session.user!.id])).rows[0];if(!admin||!await bcrypt.compare(b.data.adminPassword,admin.password_hash))return res.status(403).json({error:'Mật khẩu Admin không đúng.'});
-  const target=(await pool.query("SELECT id,username,display_name AS \"displayName\",recovery_email AS \"recoveryEmail\" FROM users WHERE id=$1 AND role<>'admin' AND active=true",[req.params.id])).rows[0];if(!target)return res.status(404).json({error:'Không tìm thấy tài khoản nhân viên đang hoạt động.'});if(!target.recoveryEmail)return res.status(400).json({error:'Tài khoản chưa có email khôi phục. Hãy thêm và lưu email trước khi đặt lại mật khẩu.'});
-  if(!process.env.RESEND_API_KEY||!process.env.RESEND_FROM_EMAIL)return res.status(503).json({error:'Chưa cấu hình email khôi phục. Railway cần có RESEND_API_KEY và RESEND_FROM_EMAIL.'});
-  const temporaryPassword=randomBytes(18).toString('base64url');
-  try{const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({from:process.env.RESEND_FROM_EMAIL,to:[target.recoveryEmail],subject:'Mật khẩu tạm thời OrderHub',text:`Xin chào ${target.displayName},\n\nQuản trị viên đã hỗ trợ đặt lại mật khẩu tài khoản ${target.username}.\n\nMật khẩu tạm thời: ${temporaryPassword}\n\nHãy đăng nhập và đổi mật khẩu ngay. Mật khẩu tạm thời chỉ dùng để đăng nhập lần đầu. Nếu bạn không yêu cầu, hãy liên hệ quản trị viên.`}),signal:AbortSignal.timeout(10000)});if(!response.ok)throw new Error('email delivery failed')}catch{return res.status(502).json({error:'Không gửi được email. Kiểm tra API key và địa chỉ gửi trong cấu hình email.'})}
-  await pool.query('UPDATE users SET password_hash=$1,must_change_password=true WHERE id=$2',[await bcrypt.hash(temporaryPassword,12),target.id]);await pool.query('DELETE FROM password_reset_codes WHERE user_id=$1',[target.id]);res.json({ok:true,message:`Đã gửi mật khẩu tạm thời đến ${target.recoveryEmail}. Nhân viên cần đổi mật khẩu khi đăng nhập.`});
+  const target=(await pool.query("SELECT id,username,display_name AS \"displayName\" FROM users WHERE id=$1 AND role<>'admin' AND active=true",[req.params.id])).rows[0];if(!target)return res.status(404).json({error:'Không tìm thấy tài khoản nhân viên đang hoạt động.'});
+  const temporaryPassword='123456a@';
+  await pool.query('UPDATE users SET password_hash=$1,must_change_password=true WHERE id=$2',[await bcrypt.hash(temporaryPassword,12),target.id]);await pool.query('DELETE FROM password_reset_codes WHERE user_id=$1',[target.id]);res.json({ok:true,displayName:target.displayName,password:temporaryPassword,message:`Đã đặt lại mật khẩu cho ${target.displayName}. Mật khẩu khởi tạo được hiển thị trên màn hình Admin.`});
 }));
 const profileKey=()=>{const key=process.env.PROFILE_ENCRYPTION_KEY;if(key&&key.length>=32)return key;const sessionSecret=process.env.SESSION_SECRET;if(!sessionSecret||sessionSecret.length<32)throw Object.assign(new Error('Máy chủ chưa cấu hình khóa mã hóa hồ sơ nhân viên.'),{status:503});return createHash('sha256').update(`OrderHub employee profile encryption v1:${sessionSecret}`).digest('hex');};
 app.get('/api/profile',asyncRoute(async(req,res)=>{
