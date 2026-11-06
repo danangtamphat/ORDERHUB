@@ -49,11 +49,13 @@ CREATE TABLE IF NOT EXISTS assigned_tasks (
   title text NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
   description text NOT NULL DEFAULT '',
   deadline date NOT NULL,
+  completion_submitted_at timestamptz,
   completed_at timestamptz,
   created_by uuid NOT NULL REFERENCES users(id),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE assigned_tasks ADD COLUMN IF NOT EXISTS work_type text NOT NULL DEFAULT 'Công việc chung';
+ALTER TABLE assigned_tasks ADD COLUMN IF NOT EXISTS completion_submitted_at timestamptz;
 CREATE INDEX IF NOT EXISTS assigned_tasks_assignee_deadline_idx ON assigned_tasks(assignee_user_id, deadline);
 CREATE TABLE IF NOT EXISTS work_schedules (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
