@@ -121,6 +121,10 @@ CREATE TABLE IF NOT EXISTS payroll_adjustments (
 );
 ALTER TABLE payroll_adjustments ADD COLUMN IF NOT EXISTS work_shifts_override integer CHECK (work_shifts_override >= 0);
 ALTER TABLE payroll_adjustments ALTER COLUMN insurance_vnd SET DEFAULT 0;
+ALTER TABLE payroll_adjustments ADD COLUMN IF NOT EXISTS insurance_default_migrated boolean NOT NULL DEFAULT false;
+UPDATE payroll_adjustments SET insurance_vnd=0,insurance_default_migrated=true WHERE insurance_default_migrated=false AND insurance_vnd=500000;
+UPDATE payroll_adjustments SET insurance_default_migrated=true WHERE insurance_default_migrated=false;
+ALTER TABLE payroll_adjustments ALTER COLUMN insurance_default_migrated SET DEFAULT true;
 CREATE TABLE IF NOT EXISTS salary_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   period_start date NOT NULL,
