@@ -81,10 +81,10 @@ app.post('/api/auth/password',asyncRoute(async(req,res)=>{
   req.session.user.mustChangePassword=false; res.json({ok:true});
 }));
 app.get('/api/users',roles('admin','manager'),asyncRoute(async(_req,res)=>{
-  const {rows}=await pool.query('SELECT id,username,display_name AS "displayName",role,active,recovery_email AS "recoveryEmail",employee_grade AS "employeeGrade",created_at AS "createdAt" FROM users ORDER BY display_name');res.json({users:rows});
+  const {rows}=await pool.query("SELECT u.id,u.username,u.display_name AS \"displayName\",u.role,u.active,u.recovery_email AS \"recoveryEmail\",u.employee_grade AS \"employeeGrade\",u.created_at AS \"createdAt\",COALESCE(p.pet_type,'cat') AS \"petType\" FROM users u LEFT JOIN pet_settings p ON p.user_id=u.id ORDER BY u.display_name");res.json({users:rows});
 }));
 app.get('/api/users/share-recipients',roles('staff'),asyncRoute(async(_req,res)=>{
-  const {rows}=await pool.query("SELECT id,username,display_name AS \"displayName\",role,active FROM users WHERE active=true AND role='staff' ORDER BY display_name");res.json({users:rows});
+  const {rows}=await pool.query("SELECT u.id,u.username,u.display_name AS \"displayName\",u.role,u.active,COALESCE(p.pet_type,'cat') AS \"petType\" FROM users u LEFT JOIN pet_settings p ON p.user_id=u.id WHERE u.active=true AND u.role='staff' ORDER BY u.display_name");res.json({users:rows});
 }));
 app.post('/api/users',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({username:z.string().trim().min(3).max(40),displayName:z.string().trim().min(1).max(100),password:z.string().min(8).max(128),role:z.enum(['manager','staff']),employeeGrade:z.number().int().min(1).max(3).default(2)}).safeParse(req.body);
