@@ -12,7 +12,7 @@ const money=(n:number)=>new Intl.NumberFormat('vi-VN').format(Math.round(n))+' �
 const localIso=(d:Date)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const isoDate=(s:string)=>new Date(`${s}T00:00:00`);
 const fmtDate=(s:string)=>new Intl.DateTimeFormat('vi-VN',{day:'2-digit',month:'2-digit'}).format(isoDate(s));
-const fmtWeekRange=(start:Date,end:Date)=>{const a=localIso(start),b=localIso(end),sameMonth=start.getMonth()===end.getMonth();return sameMonth?`Tuần ${fmtDate(a).slice(0,2)}–${fmtDate(b)}/${end.getFullYear()}`:`Tuần ${fmtDate(a)}–${fmtDate(b)}/${end.getFullYear()}`};
+const fmtWeekRange=(start:Date,end:Date)=>`Tuần ${start.getDate()}/${start.getMonth()+1} - ${end.getDate()}/${end.getMonth()+1}`;
 const escName=(p:Payslip)=>`${p.displayName} (${p.username})`;
 const normalizeStaffName=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('vi').replace(/[^a-z0-9]+/g,' ').trim();
 const shiftFromLabel=(value:string):'morning'|'afternoon'|null=>{const s=normalizeStaffName(value);if(s.includes('sang')||s.includes('morning')||s.includes('8h00')||s.includes('08 00')||s.includes('16h30')||s.includes('16 30'))return'morning';if(s.includes('chieu')||s.includes('afternoon')||s.includes('12h00')||s.includes('12 00')||s.includes('20h00')||s.includes('20 00'))return'afternoon';return null};
