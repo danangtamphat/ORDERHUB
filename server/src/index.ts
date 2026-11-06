@@ -247,8 +247,9 @@ app.post('/api/tasks',roles('admin'),asyncRoute(async(req,res)=>{
   res.status(201).json({task:rows[0]});
 }));
 app.delete('/api/tasks/bulk',roles('admin'),asyncRoute(async(req,res)=>{
-  const b=z.object({ids:z.array(z.string().uuid()).min(1).max(1000)}).safeParse(req.body);
-  if(!b.success)return res.status(400).json({error:'Chọn từ 1 đến 1.000 công việc cần xóa.'});
+  const b=z.object({ids:z.array(z.string().uuid()).min(1).max(1000),adminPassword:z.string().min(1).max(128)}).safeParse(req.body);
+  if(!b.success)return res.status(400).json({error:'Chọn công việc cần xóa và nhập mật khẩu Admin.'});
+  const admin=(await pool.query('SELECT password_hash FROM users WHERE id=$1 AND role=\'admin\' AND active=true',[req.session.user!.id])).rows[0];if(!admin||!await bcrypt.compare(b.data.adminPassword,admin.password_hash))return res.status(403).json({error:'Mật khẩu Admin không đúng.'});
   const uniqueIds=[...new Set(b.data.ids)];
   const {rowCount}=await pool.query('DELETE FROM assigned_tasks WHERE id=ANY($1::uuid[])',[uniqueIds]);
   res.json({deleted:rowCount||0});
@@ -266,6 +267,8 @@ app.patch('/api/tasks/:id/review',roles('admin'),asyncRoute(async(req,res)=>{
   const client=await pool.connect();try{await client.query('BEGIN');const result=await client.query(`UPDATE assigned_tasks SET completed_at=CASE WHEN $1 THEN completion_submitted_at ELSE NULL END,completion_submitted_at=CASE WHEN $1 THEN completion_submitted_at ELSE NULL END WHERE id=$2 AND completion_submitted_at IS NOT NULL AND completed_at IS NULL RETURNING id,assignee_user_id,completion_submitted_at AS "completionSubmittedAt",completed_at AS "completedAt"`,[b.data.approved,req.params.id]);if(!result.rowCount){await client.query('ROLLBACK');return res.status(409).json({error:'Công việc không còn yêu cầu duyệt.'})}if(b.data.approved)await client.query(`INSERT INTO pet_settings(user_id,food_count) VALUES($1,1) ON CONFLICT(user_id) DO UPDATE SET food_count=pet_settings.food_count+1,updated_at=now()`,[result.rows[0].assignee_user_id]);await client.query('COMMIT');res.json({task:result.rows[0]})}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
 }));
 app.delete('/api/tasks/:id',roles('admin'),asyncRoute(async(req,res)=>{
+  const b=z.object({adminPassword:z.string().min(1).max(128)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Vui lòng nhập mật khẩu Admin để xóa công việc.'});
+  const admin=(await pool.query('SELECT password_hash FROM users WHERE id=$1 AND role=\'admin\' AND active=true',[req.session.user!.id])).rows[0];if(!admin||!await bcrypt.compare(b.data.adminPassword,admin.password_hash))return res.status(403).json({error:'Mật khẩu Admin không đúng.'});
   const {rowCount}=await pool.query('DELETE FROM assigned_tasks WHERE id=$1',[req.params.id]);
   if(!rowCount)return res.status(404).json({error:'Không tìm thấy công việc.'});res.status(204).end();
 }));
