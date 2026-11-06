@@ -83,6 +83,9 @@ app.post('/api/auth/password',asyncRoute(async(req,res)=>{
 app.get('/api/users',roles('admin','manager'),asyncRoute(async(_req,res)=>{
   const {rows}=await pool.query('SELECT id,username,display_name AS "displayName",role,active,recovery_email AS "recoveryEmail",employee_grade AS "employeeGrade",created_at AS "createdAt" FROM users ORDER BY display_name');res.json({users:rows});
 }));
+app.get('/api/users/share-recipients',roles('staff'),asyncRoute(async(_req,res)=>{
+  const {rows}=await pool.query("SELECT id,username,display_name AS \"displayName\",role,active FROM users WHERE active=true AND role='staff' ORDER BY display_name");res.json({users:rows});
+}));
 app.post('/api/users',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({username:z.string().trim().min(3).max(40),displayName:z.string().trim().min(1).max(100),password:z.string().min(8).max(128),role:z.enum(['manager','staff']),employeeGrade:z.number().int().min(1).max(3).default(2)}).safeParse(req.body);
   if(!b.success)return res.status(400).json({error:'Thông tin không hợp lệ. Mật khẩu cần ít nhất 8 ký tự.'});
@@ -137,27 +140,30 @@ app.get('/api/orders',asyncRoute(async(req,res)=>{
   if(invoiceStatus){vals.push(invoiceStatus);where.push(`o.invoice_status=$${vals.length}`)}
   const result=await pool.query(`SELECT o.id,o.tracking_code AS "trackingCode",o.amount_vnd AS "amountVnd",COALESCE((SELECT sum(part.amount_vnd) FROM orders part WHERE part.share_group_id=o.share_group_id),o.amount_vnd) AS "grossAmountVnd",o.status,o.invoice_status AS "invoiceStatus",o.owner_user_id AS "ownerUserId",usr.display_name AS "ownerName",COALESCE(ps.pet_type,'cat') AS "ownerPetType",o.share_group_id AS "shareGroupId",o.created_at AS "createdAt" FROM orders o JOIN users usr ON usr.id=o.owner_user_id LEFT JOIN pet_settings ps ON ps.user_id=o.owner_user_id ${where.length?'WHERE '+where.join(' AND '):''} ORDER BY o.created_at DESC`,vals);res.json({orders:result.rows});
 }));
+app.get('/api/orders/duplicates',asyncRoute(async(req,res)=>{
+  if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});const {rows}=await pool.query(`SELECT count(*)::int AS count FROM (SELECT lower(tracking_code) FROM orders GROUP BY lower(tracking_code) HAVING count(DISTINCT COALESCE(share_group_id,id))>1) duplicates`);res.json({duplicateCount:Number(rows[0].count),scope:'system'});
+}));
 app.post('/api/orders',asyncRoute(async(req,res)=>{
   if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});
   const p=orderSchema.safeParse(req.body);if(!p.success)return res.status(400).json({error:'Đơn chưa hợp lệ. Mã 5–30 ký tự; giá trị 10.000–50.000.000 VNĐ.',details:p.error.flatten()});
   const actor=req.session.user;const {trackingCode,amountVnd,status,invoiceStatus}=p.data;
   const client=await pool.connect();try{await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended(lower($1),0))',[trackingCode]);const duplicate=await client.query('SELECT 1 FROM orders WHERE lower(tracking_code)=lower($1) LIMIT 1',[trackingCode]);if(duplicate.rowCount)throw Object.assign(new Error('Mã vận đơn này đã tồn tại trong hệ thống. Mỗi mã chỉ được dùng cho một đơn.'),{status:409});
     let owner=actor.id;if(actor.role==='admin'||actor.role==='manager'){owner=p.data.ownerUserId||actor.id;const check=await client.query('SELECT role FROM users WHERE id=$1 AND active=true',[owner]);if(!check.rows[0])throw Object.assign(new Error('Không tìm thấy nhân viên.'),{status:400});}
-    const recipients=[...new Set((p.data.shareUserIds||[]).filter(id=>id!==actor.id))];
-    if(recipients.length && actor.role==='staff')throw Object.assign(new Error('Nhân viên không thể chia doanh thu.'),{status:403});
+    const recipients=[...new Set((p.data.shareUserIds||[]).filter(id=>id!==owner))];
     if(recipients.length){const people=await client.query('SELECT id,role FROM users WHERE id=ANY($1::uuid[]) AND active=true', [recipients]);if(people.rows.length!==recipients.length||people.rows.some(x=>x.role!=='staff'))throw Object.assign(new Error('Chỉ được chia cho nhân viên Staff đang hoạt động.'),{status:400});}
     const group=recipients.length?crypto.randomUUID():null;const all=[owner,...recipients];const each=Math.floor(amountVnd/all.length);let remainder=amountVnd-each*all.length;
     for(const id of all){const assigned=each+(remainder>0?1:0);if(remainder>0)remainder--;await client.query(`INSERT INTO orders(tracking_code,owner_user_id,amount_vnd,status,invoice_status,share_group_id,created_by,delivered_at) VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $4='delivered' THEN now() ELSE NULL END)`,[trackingCode,id,assigned,status,invoiceStatus,group,actor.id]);}
     await client.query('COMMIT');res.status(201).json({ok:true,warning:amountVnd>=20000000?'Giá trị cao bất thường. Vui lòng kiểm tra lại.':null});
-  }catch(e){await client.query('ROLLBACK');const err=e as Error&{code?:string;status?:number};if(err.code==='23505')return res.status(409).json({error:'Mã vận đơn này đã được ghi nhận cho nhân viên nhận doanh thu.'});return res.status(err.status||400).json({error:err.message||'Không thể lưu đơn.'});}finally{client.release();}
+  }catch(e){await client.query('ROLLBACK');const err=e as Error&{code?:string;status?:number};if(err.code==='23505')return res.status(409).json({error:'Mã vận đơn này đã tồn tại trong hệ thống. Mỗi mã chỉ được dùng cho một đơn.'});return res.status(err.status||400).json({error:err.message||'Không thể lưu đơn.'});}finally{client.release();}
 }));
 app.patch('/api/orders/:id',asyncRoute(async(req,res)=>{
   if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});
   const p=orderSchema.omit({shareUserIds:true}).safeParse(req.body);if(!p.success)return res.status(400).json({error:'Thông tin đơn hàng không hợp lệ.'});
-  const u=req.session.user;const ownerId=u.role==='staff'?u.id:(p.data.ownerUserId||null);
-  const vals=[p.data.trackingCode,p.data.amountVnd,p.data.status,p.data.invoiceStatus,req.params.id];
-  const query=`UPDATE orders SET tracking_code=$1,amount_vnd=$2,status=$3,invoice_status=$4,delivered_at=CASE WHEN $3='delivered' THEN COALESCE(delivered_at,now()) ELSE NULL END,updated_at=now() WHERE id=$5 ${u.role==='staff'?'AND owner_user_id=$6':''} RETURNING id`;
-  if(u.role==='staff')vals.push(u.id);const out=await pool.query(query,vals);if(!out.rowCount)return res.status(404).json({error:'Không tìm thấy đơn hàng.'});res.json({ok:true});
+  const u=req.session.user;const client=await pool.connect();try{await client.query('BEGIN');const vals:unknown[]=[req.params.id];const ownerFilter=u.role==='staff'?'AND owner_user_id=$2':'';if(u.role==='staff')vals.push(u.id);const current=(await client.query(`SELECT tracking_code AS "trackingCode",share_group_id AS "shareGroupId" FROM orders WHERE id=$1 ${ownerFilter} FOR UPDATE`,vals)).rows[0];if(!current){await client.query('ROLLBACK');return res.status(404).json({error:'Không tìm thấy đơn hàng.'});}
+    if(String(current.trackingCode).toLowerCase()!==p.data.trackingCode.toLowerCase()){await client.query('SELECT pg_advisory_xact_lock(hashtextextended(lower($1),0))',[p.data.trackingCode]);const duplicate=await client.query(`SELECT 1 FROM orders WHERE lower(tracking_code)=lower($1) AND ($2::uuid IS NULL AND id<>$3 OR $2::uuid IS NOT NULL AND share_group_id IS DISTINCT FROM $2) LIMIT 1`,[p.data.trackingCode,current.shareGroupId,req.params.id]);if(duplicate.rowCount)throw Object.assign(new Error('Mã vận đơn này đã tồn tại trong hệ thống. Mỗi mã chỉ được dùng cho một đơn.'),{status:409});if(current.shareGroupId)await client.query('UPDATE orders SET tracking_code=$1 WHERE share_group_id=$2',[p.data.trackingCode,current.shareGroupId]);}
+    const updateVals=[p.data.trackingCode,p.data.amountVnd,p.data.status,p.data.invoiceStatus,req.params.id,...(u.role==='staff'?[u.id]:[])];const out=await client.query(`UPDATE orders SET tracking_code=$1,amount_vnd=$2,status=$3,invoice_status=$4,delivered_at=CASE WHEN $3='delivered' THEN COALESCE(delivered_at,now()) ELSE NULL END,updated_at=now() WHERE id=$5 ${u.role==='staff'?'AND owner_user_id=$6':''} RETURNING id`,updateVals);if(!out.rowCount)throw Object.assign(new Error('Không tìm thấy đơn hàng.'),{status:404});await client.query('COMMIT');res.json({ok:true});
+  }catch(e){await client.query('ROLLBACK');const err=e as Error&{status?:number};res.status(err.status||400).json({error:err.message||'Không thể cập nhật đơn hàng.'});}finally{client.release()}
 }));
 app.post('/api/orders/bulk-status',asyncRoute(async(req,res)=>{
   if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});
