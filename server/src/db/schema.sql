@@ -138,6 +138,7 @@ ALTER TABLE payroll_adjustments ADD COLUMN IF NOT EXISTS insurance_default_migra
 UPDATE payroll_adjustments SET insurance_vnd=0,insurance_default_migrated=true WHERE insurance_default_migrated=false AND insurance_vnd=500000;
 UPDATE payroll_adjustments SET insurance_default_migrated=true WHERE insurance_default_migrated=false;
 ALTER TABLE payroll_adjustments ALTER COLUMN insurance_default_migrated SET DEFAULT true;
+UPDATE payroll_adjustments SET completion_rate=100 WHERE completion_rate>100;
 CREATE TABLE IF NOT EXISTS payroll_penalties (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
