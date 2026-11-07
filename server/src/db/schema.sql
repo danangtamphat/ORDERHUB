@@ -138,6 +138,18 @@ ALTER TABLE payroll_adjustments ADD COLUMN IF NOT EXISTS insurance_default_migra
 UPDATE payroll_adjustments SET insurance_vnd=0,insurance_default_migrated=true WHERE insurance_default_migrated=false AND insurance_vnd=500000;
 UPDATE payroll_adjustments SET insurance_default_migrated=true WHERE insurance_default_migrated=false;
 ALTER TABLE payroll_adjustments ALTER COLUMN insurance_default_migrated SET DEFAULT true;
+CREATE TABLE IF NOT EXISTS payroll_penalties (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  period_start date NOT NULL,
+  description text NOT NULL,
+  points numeric(8,2) NOT NULL DEFAULT 0 CHECK (points >= 0),
+  fine_amount_vnd bigint NOT NULL DEFAULT 0 CHECK (fine_amount_vnd >= 0),
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (points > 0 OR fine_amount_vnd > 0)
+);
+CREATE INDEX IF NOT EXISTS payroll_penalties_period_user_idx ON payroll_penalties(period_start,user_id,created_at DESC);
 CREATE TABLE IF NOT EXISTS salary_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   period_start date NOT NULL,
