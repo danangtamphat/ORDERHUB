@@ -184,3 +184,25 @@ body:has(.branded-shell){background-color:#edf3fb;background-image:radial-gradie
 @media(max-width:900px){.branded-shell .brand-header{background-size:300% 300%}.branded-shell .header-stat-grid{gap:11px}.branded-shell .header-stat-grid .stat-card{min-height:92px;padding:14px}.branded-shell .header-stat-grid .stat-value{font-size:24px}}
 @media(max-width:620px){.branded-shell .brand-header{padding:9px 12px 12px}.branded-shell .header-quote{padding-top:8px}.branded-shell .header-quote strong{font-size:18px}.branded-shell .header-quote small{font-size:8px}.branded-shell .header-stat-grid{gap:8px}.branded-shell .header-stat-grid .stat-card{min-height:78px;padding:11px 12px;border-radius:12px}.branded-shell .header-stat-grid .stat-value{font-size:21px}.branded-shell .header-stat-grid .stat-icon{width:31px;height:31px}.branded-shell .horizontal-nav{gap:2px;min-height:45px;margin-bottom:15px}.branded-shell .horizontal-nav-item{padding:10px 9px 8px;font-size:12.6px}.branded-shell .panel,.branded-shell .orders-panel{border-radius:12px}}
 @media(prefers-reduced-motion:reduce){.branded-shell .brand-header{animation:none!important;background-position:50% 50%!important}.branded-shell .brand-header::before,.branded-shell .brand-header::after{animation:none!important}.branded-shell .content>*{animation:none!important}}
+
+/* Latest readability and toolbar corrections */
+.branded-shell .horizontal-nav-item{font-size:21px;padding:15px 17px 12px;gap:9px}
+.branded-shell .horizontal-nav-item svg{width:20px;height:20px}
+.branded-shell .reconciliation-upload{color:#fff!important;-webkit-text-fill-color:#fff;background:linear-gradient(115deg,#078866,#05a879 55%,#04b889)!important;border:1px solid #078866!important;box-shadow:0 5px 15px #079b733b,inset 0 1px #ffffff55!important}
+.branded-shell .reconciliation-upload:hover{background:linear-gradient(115deg,#05785c,#078d6d 55%,#079e78)!important;color:#fff!important;box-shadow:0 8px 20px #079b7352,inset 0 1px #ffffff66!important}
+.branded-shell .brand-header{background:linear-gradient(118deg,#9bb9df 0%,#83a8d6 28%,#91afd8 54%,#a8b9df 78%,#8eacd4 100%);background-size:240% 240%;box-shadow:0 8px 24px #31578226,inset 0 -1px #ffffffa0}
+.branded-shell .brand-header::before{background-image:radial-gradient(ellipse at 18% 12%,#ffffff6e,transparent 30%),radial-gradient(ellipse at 76% 70%,#b5aaff55,transparent 34%),radial-gradient(ellipse at 92% 4%,#70e8dc38,transparent 28%),repeating-linear-gradient(0deg,transparent 0 38px,#ffffff21 39px 40px),repeating-linear-gradient(90deg,transparent 0 38px,#ffffff21 39px 40px)}
+.branded-shell .brand-header::after{background:linear-gradient(112deg,transparent 42%,#ffffff1c 47%,#ffffff72 50%,#e8f6ff38 53%,transparent 59%)}
+.branded-shell .brand-lockup strong{font-size:16px;color:#173965;text-shadow:none}
+.branded-shell .brand-lockup small{font-size:10px;color:#294f7d}
+.branded-shell .brand-lockup .brand-mark{border-color:#ffffffbd;background:linear-gradient(145deg,#ffffffc9,#dbeaffb5);color:#315bea;box-shadow:0 0 0 4px #ffffff35,0 5px 15px #2b548329}
+.branded-shell .header-clock{border-color:#ffffffb5;background:#ffffff55;box-shadow:inset 0 1px #ffffffc9,0 5px 16px #31578214}
+.branded-shell .header-clock span{font-size:10px;color:#264d7a}
+.branded-shell .header-clock strong{font-size:16px;color:#173965;text-shadow:none}
+.branded-shell .header-user strong{font-size:12px;color:#173965}
+.branded-shell .header-user span{font-size:9px;color:#315b87}
+.branded-shell .header-quote{padding-top:4px}
+.branded-shell .header-quote strong{font-size:clamp(18px,1.55vw,23px);color:#173965;text-shadow:0 1px 8px #ffffff75}
+.branded-shell .header-quote small{font-size:8px;color:#315b87;letter-spacing:.9px}
+@media(max-width:900px){.branded-shell .horizontal-nav-item{font-size:19px;padding:13px 13px 10px}.branded-shell .horizontal-nav-item svg{width:19px;height:19px}}
+@media(max-width:620px){.branded-shell .horizontal-nav-item{font-size:18px;padding:11px 10px 9px;gap:7px}.branded-shell .horizontal-nav-item svg{width:17px;height:17px}.branded-shell .header-quote strong{font-size:16px}.branded-shell .brand-lockup strong{font-size:13px}.branded-shell .header-clock strong{font-size:14px}}
