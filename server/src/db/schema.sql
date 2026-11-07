@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS payroll_penalties (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   period_start date NOT NULL,
+  violation_date date NOT NULL DEFAULT ((now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date),
   description text NOT NULL,
   points numeric(8,2) NOT NULL DEFAULT 0 CHECK (points >= 0),
   fine_amount_vnd bigint NOT NULL DEFAULT 0 CHECK (fine_amount_vnd >= 0),
@@ -149,6 +150,10 @@ CREATE TABLE IF NOT EXISTS payroll_penalties (
   created_at timestamptz NOT NULL DEFAULT now(),
   CHECK (points > 0 OR fine_amount_vnd > 0)
 );
+ALTER TABLE payroll_penalties ADD COLUMN IF NOT EXISTS violation_date date;
+UPDATE payroll_penalties SET violation_date=(created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date WHERE violation_date IS NULL;
+ALTER TABLE payroll_penalties ALTER COLUMN violation_date SET DEFAULT ((now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date);
+ALTER TABLE payroll_penalties ALTER COLUMN violation_date SET NOT NULL;
 CREATE INDEX IF NOT EXISTS payroll_penalties_period_user_idx ON payroll_penalties(period_start,user_id,created_at DESC);
 CREATE TABLE IF NOT EXISTS salary_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

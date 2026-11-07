@@ -230,16 +230,35 @@ app.get('/api/payroll',asyncRoute(async(req,res)=>{
   let totalAll=0;if(actor.role==='admin'&&userId){const all=await pool.query(query.replace('AND u.id=$2',''),[period]);for(const r of all.rows){const rate=r.role==='manager'?40000:[20000,25000,30000][Math.max(0,Math.min(2,Number(r.employeeGrade)-1))];const base=Number(r.workShifts)*8*rate;const ratio=Math.min(Number(r.workShifts),26)/26;totalAll+=Math.round(base*Number(r.completionRate)/100+Math.round(Number(r.revenue)*.015)+Math.round(700000*ratio)+Number(r.otherIncome)-Number(r.latePenalty)-Number(r.lossPenalty)-Number(r.penaltyFineAmount)-Number(r.insurance)-Number(r.advance)-Number(r.holdback));}}else totalAll=payslips.reduce((n,p)=>n+Number(p.netSalary),0);
   res.json({payslips,totalAll,period});
 }));
-app.get('/api/payroll/penalties',roles('admin'),asyncRoute(async(req,res)=>{
+const penaltyTypes=[
+  {key:'wrong_package',name:'Gói sai / gói thiếu',points:1,fineAmount:50000},
+  {key:'wrong_or_missed_order',name:'Tạo sai đơn / sót đơn',points:1,fineAmount:50000},
+  {key:'missed_package_order',name:'Gói sót đơn',points:1,fineAmount:0},
+  {key:'duplicate_package_order',name:'Gói trùng đơn',points:1,fineAmount:0},
+  {key:'false_return_confirmation',name:'Xác nhận không đơn hoàn',points:20,fineAmount:2000000},
+  {key:'unprocessed_viettel',name:'Không xử lý đơn chờ xử lý Viettel',points:1,fineAmount:0},
+  {key:'personal_work',name:'Làm việc riêng trong giờ làm',points:5,fineAmount:0},
+  {key:'unapproved_absence',name:'Nghỉ không phép',points:10,fineAmount:0},
+  {key:'late_customer_reply',name:'Rep khách chậm trễ',points:1,fineAmount:0},
+  {key:'unclean_workplace',name:'Không vệ sinh vị trí làm việc',points:1,fineAmount:0},
+  {key:'unprocessed_return',name:'Không xử lý đơn hoàn trả',points:1,fineAmount:0},
+  {key:'missed_lost_order_claim',name:'Không khiếu nại khi có đơn thất lạc',points:10,fineAmount:null},
+  {key:'low_customer_rating',name:'Sai phạm dẫn đến khách đánh giá 1, 2 sao',points:5,fineAmount:0},
+  {key:'utilities_left_on',name:'Không tắt thiết bị điện, nước khi ra về',points:1,fineAmount:0},
+  {key:'unauthorized_return',name:'Tự ý xác nhận đơn hoàn khi chưa có hàng hoàn về',points:10,fineAmount:null},
+] as const;
+app.get('/api/payroll/penalty-types',roles('admin','staff','manager'),asyncRoute(async(_req,res)=>res.json({types:penaltyTypes})));
+app.get('/api/payroll/penalties',roles('admin','staff','manager'),asyncRoute(async(req,res)=>{
   const {month='',year='',userId=''}=req.query as Record<string,string>;if(!/^\d{1,2}$/.test(month)||!/^[0-9]{4}$/.test(year))return res.status(400).json({error:'Cần chọn kỳ lương hợp lệ.'});
-  const period=`${year}-${month.padStart(2,'0')}-01`,args:unknown[]=[period],scope=userId?'AND p.user_id=$2':'';if(userId)args.push(userId);
-  const {rows}=await pool.query(`SELECT p.id,p.user_id AS "userId",u.display_name AS "displayName",u.username,p.description,p.points,p.fine_amount_vnd AS "fineAmount",to_char(p.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh','DD/MM/YY HH24:MI') AS "createdAt" FROM payroll_penalties p JOIN users u ON u.id=p.user_id WHERE p.period_start=$1::date ${scope} ORDER BY p.created_at DESC`,args);res.json({penalties:rows});
+  const period=`${year}-${month.padStart(2,'0')}-01`,isAdmin=req.session.user!.role==='admin',target=isAdmin?userId:req.session.user!.id,args:unknown[]=[period],scope=target?'AND p.user_id=$2':'';if(target)args.push(target);
+  const {rows}=await pool.query(`SELECT p.id,p.user_id AS "userId",u.display_name AS "displayName",u.username,p.description,p.points,p.fine_amount_vnd AS "fineAmount",to_char(p.violation_date,'DD/MM/YY') AS "violationDate",to_char(p.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh','DD/MM/YY HH24:MI') AS "createdAt" FROM payroll_penalties p JOIN users u ON u.id=p.user_id WHERE p.period_start=$1::date ${scope} ORDER BY p.violation_date DESC,p.created_at DESC`,args);res.json({penalties:rows});
 }));
 app.post('/api/payroll/penalties',roles('admin'),asyncRoute(async(req,res)=>{
-  const b=z.object({userId:z.string().uuid(),month:z.number().int().min(1).max(12),year:z.number().int().min(2020).max(2100),description:z.string().trim().min(1).max(500),points:z.number().min(0).max(300).default(0),fineAmount:z.number().int().min(0).max(1000000000).default(0)}).refine(v=>v.points>0||v.fineAmount>0).safeParse(req.body);
-  if(!b.success)return res.status(400).json({error:'Nhập nội dung phạt và ít nhất một khoản điểm trừ hoặc tiền phạt hợp lệ.'});
-  const p=b.data,exists=await pool.query("SELECT id FROM users WHERE id=$1 AND role IN ('staff','manager') AND active=true",[p.userId]);if(!exists.rowCount)return res.status(404).json({error:'Không tìm thấy nhân viên.'});
-  const period=`${p.year}-${String(p.month).padStart(2,'0')}-01`;const {rows}=await pool.query(`INSERT INTO payroll_penalties(user_id,period_start,description,points,fine_amount_vnd,created_by) VALUES($1,$2::date,$3,$4,$5,$6) RETURNING id`,[p.userId,period,p.description,p.points,p.fineAmount,req.session.user!.id]);res.status(201).json({ok:true,id:rows[0].id});
+  const b=z.object({userId:z.string().uuid(),violationDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),typeKey:z.string(),fineAmount:z.number().int().min(0).max(1000000000).optional()}).safeParse(req.body);
+  if(!b.success)return res.status(400).json({error:'Chọn nhân viên, lỗi vi phạm và ngày vi phạm hợp lệ.'});
+  const p=b.data,type=penaltyTypes.find(t=>t.key===p.typeKey);if(!type)return res.status(400).json({error:'Loại vi phạm không hợp lệ.'});if(type.fineAmount===null&&p.fineAmount===undefined)return res.status(400).json({error:'Nhập số tiền đền bù do admin xác định.'});
+  const fineAmount=type.fineAmount===null?p.fineAmount!:type.fineAmount,exists=await pool.query("SELECT id FROM users WHERE id=$1 AND role IN ('staff','manager') AND active=true",[p.userId]);if(!exists.rowCount)return res.status(404).json({error:'Không tìm thấy nhân viên.'});
+  const {rows}=await pool.query(`INSERT INTO payroll_penalties(user_id,period_start,violation_date,description,points,fine_amount_vnd,created_by) VALUES($1,date_trunc('month',$2::date)::date,$2::date,$3,$4,$5,$6) RETURNING id`,[p.userId,p.violationDate,type.name,type.points,fineAmount,req.session.user!.id]);res.status(201).json({ok:true,id:rows[0].id});
 }));
 app.delete('/api/payroll/penalties/:id',roles('admin'),asyncRoute(async(req,res)=>{const {rowCount}=await pool.query('DELETE FROM payroll_penalties WHERE id=$1',[req.params.id]);if(!rowCount)return res.status(404).json({error:'Không tìm thấy khoản phạt.'});res.status(204).end()}));
 app.put('/api/payroll/:userId',roles('admin'),asyncRoute(async(req,res)=>{
