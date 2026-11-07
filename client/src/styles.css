@@ -206,3 +206,7 @@ body:has(.branded-shell){background-color:#edf3fb;background-image:radial-gradie
 .branded-shell .header-quote small{font-size:8px;color:#315b87;letter-spacing:.9px}
 @media(max-width:900px){.branded-shell .horizontal-nav-item{font-size:19px;padding:13px 13px 10px}.branded-shell .horizontal-nav-item svg{width:19px;height:19px}}
 @media(max-width:620px){.branded-shell .horizontal-nav-item{font-size:18px;padding:11px 10px 9px;gap:7px}.branded-shell .horizontal-nav-item svg{width:17px;height:17px}.branded-shell .header-quote strong{font-size:16px}.branded-shell .brand-lockup strong{font-size:13px}.branded-shell .header-clock strong{font-size:14px}}
+
+/* Order table header: the pale title row indicated in the reference */
+.branded-shell .orders-panel table thead th{background:#f1f5fa!important;color:#52647d!important;border-color:#dfe7f1!important;font-size:16px!important;font-weight:650!important;letter-spacing:.2px;padding:12px 14px!important}
+.branded-shell .orders-panel table thead th:first-child,.branded-shell .orders-panel table thead th:last-child{border-radius:0}
