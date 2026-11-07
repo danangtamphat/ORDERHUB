@@ -57,6 +57,15 @@ CREATE TABLE IF NOT EXISTS assigned_tasks (
 ALTER TABLE assigned_tasks ADD COLUMN IF NOT EXISTS work_type text NOT NULL DEFAULT 'Công việc chung';
 ALTER TABLE assigned_tasks ADD COLUMN IF NOT EXISTS completion_submitted_at timestamptz;
 CREATE INDEX IF NOT EXISTS assigned_tasks_assignee_deadline_idx ON assigned_tasks(assignee_user_id, deadline);
+CREATE TABLE IF NOT EXISTS task_review_notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  task_title text NOT NULL,
+  decision text NOT NULL CHECK (decision IN ('approved','rejected')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  read_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS task_review_notifications_unread_idx ON task_review_notifications(user_id, created_at DESC) WHERE read_at IS NULL;
 CREATE TABLE IF NOT EXISTS work_schedules (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id),
