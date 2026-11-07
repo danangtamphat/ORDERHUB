@@ -251,7 +251,7 @@ const penaltyTypes=[
   {key:'missed_lost_order_claim',name:'Không khiếu nại khi có đơn thất lạc',points:10,fineAmount:null},
   {key:'low_customer_rating',name:'Sai phạm dẫn đến khách đánh giá 1, 2 sao',points:5,fineAmount:0},
   {key:'utilities_left_on',name:'Không tắt thiết bị điện, nước khi ra về',points:1,fineAmount:0},
-  {key:'unauthorized_return',name:'Tự ý xác nhận đơn hoàn khi chưa có hàng hoàn về',points:10,fineAmount:null},
+  {key:'unauthorized_return',name:'Tự ý xác nhận đơn hoàn khi chưa có hàng hoàn về · đền bù toàn bộ giá trị đơn hàng',points:10,fineAmount:null},
 ] as const;
 app.get('/api/payroll/penalty-types',roles('admin','staff','manager'),asyncRoute(async(_req,res)=>res.json({types:penaltyTypes})));
 app.get('/api/payroll/penalties',roles('admin','staff','manager'),asyncRoute(async(req,res)=>{
@@ -262,7 +262,7 @@ app.get('/api/payroll/penalties',roles('admin','staff','manager'),asyncRoute(asy
 app.post('/api/payroll/penalties',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({userId:z.string().uuid(),violationDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),typeKey:z.string(),fineAmount:z.number().int().min(0).max(1000000000).optional(),compensationAmount:z.number().int().min(0).max(1000000000).default(0)}).safeParse(req.body);
   if(!b.success)return res.status(400).json({error:'Chọn nhân viên, lỗi vi phạm và ngày vi phạm hợp lệ.'});
-  const p=b.data,type=penaltyTypes.find(t=>t.key===p.typeKey);if(!type)return res.status(400).json({error:'Loại vi phạm không hợp lệ.'});if(type.fineAmount===null&&p.fineAmount===undefined)return res.status(400).json({error:'Nhập số tiền đền bù do admin xác định.'});
+  const p=b.data,type=penaltyTypes.find(t=>t.key===p.typeKey);if(!type)return res.status(400).json({error:'Loại vi phạm không hợp lệ.'});if(type.fineAmount===null&&(p.fineAmount===undefined||p.fineAmount<=0))return res.status(400).json({error:'Nhập số tiền đền bù do admin xác định.'});
   if(p.compensationAmount>0&&p.typeKey!=='wrong_package')return res.status(400).json({error:'Khoản đền bù đơn hàng chỉ áp dụng cho lỗi Gói sai / gói thiếu.'});
   const fineAmount=(type.fineAmount===null?p.fineAmount!:type.fineAmount)+p.compensationAmount,exists=await pool.query("SELECT id FROM users WHERE id=$1 AND role IN ('staff','manager') AND active=true",[p.userId]);if(!exists.rowCount)return res.status(404).json({error:'Không tìm thấy nhân viên.'});
   const {rows}=await pool.query(`INSERT INTO payroll_penalties(user_id,period_start,violation_date,description,points,fine_amount_vnd,created_by) VALUES($1,date_trunc('month',$2::date)::date,$2::date,$3,$4,$5,$6) RETURNING id`,[p.userId,p.violationDate,type.name,type.points,fineAmount,req.session.user!.id]);res.status(201).json({ok:true,id:rows[0].id});
