@@ -175,6 +175,10 @@ UPDATE payroll_penalties SET violation_date=(created_at AT TIME ZONE 'Asia/Ho_Ch
 ALTER TABLE payroll_penalties ALTER COLUMN violation_date SET DEFAULT ((now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date);
 ALTER TABLE payroll_penalties ALTER COLUMN violation_date SET NOT NULL;
 CREATE INDEX IF NOT EXISTS payroll_penalties_period_user_idx ON payroll_penalties(period_start,user_id,created_at DESC);
+-- Raise legacy records to the current 20-point rule for unauthorized return confirmation.
+UPDATE payroll_penalties SET points=20
+WHERE description LIKE 'Tự ý xác nhận đơn hoàn khi chưa có hàng hoàn về%'
+  AND points=10;
 CREATE TABLE IF NOT EXISTS salary_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   period_start date NOT NULL,
