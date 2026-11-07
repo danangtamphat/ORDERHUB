@@ -241,11 +241,11 @@ const penaltyTypes=[
   {key:'wrong_or_missed_order',name:'Tạo sai đơn / sót đơn',points:1,fineAmount:50000},
   {key:'missed_package_order',name:'Gói sót đơn',points:1,fineAmount:0},
   {key:'duplicate_package_order',name:'Gói trùng đơn',points:1,fineAmount:0},
-  {key:'false_return_confirmation',name:'Xác nhận không đơn hoàn',points:20,fineAmount:2000000},
+  {key:'false_return_confirmation',name:'Xác nhận khống đơn hoàn',points:20,fineAmount:2000000},
   {key:'unprocessed_viettel',name:'Không xử lý đơn chờ xử lý Viettel',points:1,fineAmount:0},
   {key:'personal_work',name:'Làm việc riêng trong giờ làm',points:5,fineAmount:0},
   {key:'unapproved_absence',name:'Nghỉ không phép',points:10,fineAmount:0},
-  {key:'late_customer_reply',name:'Rep khách chậm trễ',points:1,fineAmount:0},
+  {key:'late_customer_reply',name:'Rep khách chậm / không rep khách',points:1,fineAmount:0},
   {key:'unclean_workplace',name:'Không vệ sinh vị trí làm việc',points:1,fineAmount:0},
   {key:'unprocessed_return',name:'Không xử lý đơn hoàn trả',points:1,fineAmount:0},
   {key:'missed_lost_order_claim',name:'Không khiếu nại khi có đơn thất lạc',points:10,fineAmount:null},
@@ -260,10 +260,11 @@ app.get('/api/payroll/penalties',roles('admin','staff','manager'),asyncRoute(asy
   const {rows}=await pool.query(`SELECT p.id,p.user_id AS "userId",u.display_name AS "displayName",u.username,p.description,round(p.points)::int AS points,p.fine_amount_vnd AS "fineAmount",to_char(p.violation_date,'DD/MM/YY') AS "violationDate",to_char(p.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh','DD/MM/YY HH24:MI') AS "createdAt" FROM payroll_penalties p JOIN users u ON u.id=p.user_id WHERE p.period_start=$1::date ${scope} ORDER BY p.violation_date DESC,p.created_at DESC`,args);res.json({penalties:rows});
 }));
 app.post('/api/payroll/penalties',roles('admin'),asyncRoute(async(req,res)=>{
-  const b=z.object({userId:z.string().uuid(),violationDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),typeKey:z.string(),fineAmount:z.number().int().min(0).max(1000000000).optional()}).safeParse(req.body);
+  const b=z.object({userId:z.string().uuid(),violationDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),typeKey:z.string(),fineAmount:z.number().int().min(0).max(1000000000).optional(),compensationAmount:z.number().int().min(0).max(1000000000).default(0)}).safeParse(req.body);
   if(!b.success)return res.status(400).json({error:'Chọn nhân viên, lỗi vi phạm và ngày vi phạm hợp lệ.'});
   const p=b.data,type=penaltyTypes.find(t=>t.key===p.typeKey);if(!type)return res.status(400).json({error:'Loại vi phạm không hợp lệ.'});if(type.fineAmount===null&&p.fineAmount===undefined)return res.status(400).json({error:'Nhập số tiền đền bù do admin xác định.'});
-  const fineAmount=type.fineAmount===null?p.fineAmount!:type.fineAmount,exists=await pool.query("SELECT id FROM users WHERE id=$1 AND role IN ('staff','manager') AND active=true",[p.userId]);if(!exists.rowCount)return res.status(404).json({error:'Không tìm thấy nhân viên.'});
+  if(p.compensationAmount>0&&p.typeKey!=='wrong_package')return res.status(400).json({error:'Khoản đền bù đơn hàng chỉ áp dụng cho lỗi Gói sai / gói thiếu.'});
+  const fineAmount=(type.fineAmount===null?p.fineAmount!:type.fineAmount)+p.compensationAmount,exists=await pool.query("SELECT id FROM users WHERE id=$1 AND role IN ('staff','manager') AND active=true",[p.userId]);if(!exists.rowCount)return res.status(404).json({error:'Không tìm thấy nhân viên.'});
   const {rows}=await pool.query(`INSERT INTO payroll_penalties(user_id,period_start,violation_date,description,points,fine_amount_vnd,created_by) VALUES($1,date_trunc('month',$2::date)::date,$2::date,$3,$4,$5,$6) RETURNING id`,[p.userId,p.violationDate,type.name,type.points,fineAmount,req.session.user!.id]);res.status(201).json({ok:true,id:rows[0].id});
 }));
 app.delete('/api/payroll/penalties/:id',roles('admin'),asyncRoute(async(req,res)=>{const {rowCount}=await pool.query('DELETE FROM payroll_penalties WHERE id=$1',[req.params.id]);if(!rowCount)return res.status(404).json({error:'Không tìm thấy khoản phạt.'});res.status(204).end()}));
