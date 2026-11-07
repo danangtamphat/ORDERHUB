@@ -199,6 +199,12 @@ app.get('/api/tasks/review-notifications',asyncRoute(async(req,res)=>{
   const {rows}=await pool.query(`WITH pending AS (SELECT id FROM task_review_notifications WHERE user_id=$1 AND read_at IS NULL ORDER BY created_at FOR UPDATE SKIP LOCKED), marked AS (UPDATE task_review_notifications n SET read_at=now() FROM pending p WHERE n.id=p.id RETURNING n.id,n.task_title AS "taskTitle",n.decision,n.created_at AS "createdAt") SELECT * FROM marked ORDER BY "createdAt" DESC`,[req.session.user.id]);
   res.json({notifications:rows});
 }));
+app.get('/api/tasks/assignment-notifications',asyncRoute(async(req,res)=>{
+  if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});
+  if(req.session.user.role==='admin')return res.json({notifications:[]});
+  const {rows}=await pool.query(`WITH pending AS (SELECT id FROM task_assignment_notifications WHERE user_id=$1 AND read_at IS NULL ORDER BY created_at FOR UPDATE SKIP LOCKED), marked AS (UPDATE task_assignment_notifications n SET read_at=now() FROM pending p WHERE n.id=p.id RETURNING n.id,n.task_id AS "taskId",n.task_title AS title,to_char(n.deadline,'YYYY-MM-DD') AS deadline,n.created_at AS "createdAt") SELECT * FROM marked ORDER BY "createdAt" DESC`,[req.session.user.id]);
+  res.json({notifications:rows});
+}));
 app.get('/api/schedules',asyncRoute(async(req,res)=>{
   if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});
   const {month='',year='',userId=''}=req.query as Record<string,string>;const args:unknown[]=[];const where:string[]=[];const actor=req.session.user;
@@ -241,7 +247,6 @@ const penaltyTypes=[
   {key:'wrong_or_missed_order',name:'Tạo sai đơn / sót đơn',points:1,fineAmount:50000},
   {key:'missed_package_order',name:'Gói sót đơn',points:1,fineAmount:0},
   {key:'duplicate_package_order',name:'Gói trùng đơn',points:1,fineAmount:0},
-  {key:'false_return_confirmation',name:'Xác nhận khống đơn hoàn',points:20,fineAmount:2000000},
   {key:'unprocessed_viettel',name:'Không xử lý đơn chờ xử lý Viettel',points:1,fineAmount:0},
   {key:'personal_work',name:'Làm việc riêng trong giờ làm',points:5,fineAmount:0},
   {key:'unapproved_absence',name:'Nghỉ không phép',points:10,fineAmount:0},
@@ -251,7 +256,7 @@ const penaltyTypes=[
   {key:'missed_lost_order_claim',name:'Không khiếu nại khi có đơn thất lạc',points:10,fineAmount:null},
   {key:'low_customer_rating',name:'Sai phạm dẫn đến khách đánh giá 1, 2 sao',points:5,fineAmount:0},
   {key:'utilities_left_on',name:'Không tắt thiết bị điện, nước khi ra về',points:1,fineAmount:0},
-  {key:'unauthorized_return',name:'Tự ý xác nhận đơn hoàn khi chưa có hàng hoàn về · đền bù toàn bộ giá trị đơn hàng',points:10,fineAmount:null},
+  {key:'unauthorized_return',name:'Tự ý xác nhận đơn hoàn khi chưa có hàng hoàn về · đền bù toàn bộ giá trị đơn hàng',points:20,fineAmount:null},
 ] as const;
 app.get('/api/payroll/penalty-types',roles('admin','staff','manager'),asyncRoute(async(_req,res)=>res.json({types:penaltyTypes})));
 app.get('/api/payroll/penalties',roles('admin','staff','manager'),asyncRoute(async(req,res)=>{
@@ -279,8 +284,7 @@ app.post('/api/tasks',roles('admin'),asyncRoute(async(req,res)=>{
   if(!b.success)return res.status(400).json({error:'Vui lòng kiểm tra nhân viên, kiểu công việc, tên công việc và deadline.'});
   const check=await pool.query("SELECT id FROM users WHERE id=$1 AND active=true AND role IN ('staff','manager')",[b.data.assigneeUserId]);
   if(!check.rowCount)return res.status(400).json({error:'Chỉ có thể giao việc cho nhân viên hoặc quản lý đang hoạt động.'});
-  const {rows}=await pool.query(`INSERT INTO assigned_tasks(assignee_user_id,work_type,title,description,deadline,created_by) VALUES($1,$2,$3,$4,$5::date,$6) RETURNING id,assignee_user_id AS "assigneeUserId",work_type AS "workType",title,description,to_char(deadline,'YYYY-MM-DD') AS deadline,completed_at AS "completedAt"`,[b.data.assigneeUserId,b.data.workType,b.data.title,b.data.description,b.data.deadline,req.session.user!.id]);
-  res.status(201).json({task:rows[0]});
+  const client=await pool.connect();try{await client.query('BEGIN');const {rows}=await client.query(`INSERT INTO assigned_tasks(assignee_user_id,work_type,title,description,deadline,created_by) VALUES($1,$2,$3,$4,$5::date,$6) RETURNING id,assignee_user_id AS "assigneeUserId",work_type AS "workType",title,description,to_char(deadline,'YYYY-MM-DD') AS deadline,completed_at AS "completedAt"`,[b.data.assigneeUserId,b.data.workType,b.data.title,b.data.description,b.data.deadline,req.session.user!.id]);await client.query(`INSERT INTO task_assignment_notifications(user_id,task_id,task_title,deadline) VALUES($1,$2,$3,$4::date)`,[b.data.assigneeUserId,rows[0].id,b.data.title,b.data.deadline]);await client.query('COMMIT');res.status(201).json({task:rows[0]})}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
 }));
 app.delete('/api/tasks/bulk',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({ids:z.array(z.string().uuid()).min(1).max(1000),adminPassword:z.string().min(1).max(128)}).safeParse(req.body);

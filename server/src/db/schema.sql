@@ -66,6 +66,16 @@ CREATE TABLE IF NOT EXISTS task_review_notifications (
   read_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS task_review_notifications_unread_idx ON task_review_notifications(user_id, created_at DESC) WHERE read_at IS NULL;
+CREATE TABLE IF NOT EXISTS task_assignment_notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  task_id uuid NOT NULL REFERENCES assigned_tasks(id) ON DELETE CASCADE,
+  task_title text NOT NULL,
+  deadline date NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  read_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS task_assignment_notifications_unread_idx ON task_assignment_notifications(user_id, created_at DESC) WHERE read_at IS NULL;
 CREATE TABLE IF NOT EXISTS work_schedules (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id),
