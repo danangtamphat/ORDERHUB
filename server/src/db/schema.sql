@@ -210,3 +210,13 @@ CREATE TABLE IF NOT EXISTS inventory_movements (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS inventory_movements_item_created_idx ON inventory_movements(item_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS inventory_weekly_counts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_id uuid NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+  week_start date NOT NULL,
+  quantity numeric(14,3) NOT NULL CHECK (quantity >= 0),
+  entered_by uuid NOT NULL REFERENCES users(id),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(item_id,week_start)
+);
+CREATE INDEX IF NOT EXISTS inventory_weekly_counts_week_idx ON inventory_weekly_counts(week_start,item_id);
