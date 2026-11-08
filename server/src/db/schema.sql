@@ -41,6 +41,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS orders_owner_tracking_code_idx
 CREATE INDEX IF NOT EXISTS orders_created_at_idx ON orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS orders_owner_idx ON orders(owner_user_id);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at timestamptz;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_reconciled boolean NOT NULL DEFAULT false;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS reconciled_by uuid REFERENCES users(id);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS reconciled_at timestamptz;
 UPDATE orders SET delivered_at=updated_at WHERE status='delivered' AND delivered_at IS NULL;
 CREATE TABLE IF NOT EXISTS assigned_tasks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
