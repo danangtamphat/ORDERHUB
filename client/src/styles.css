@@ -280,4 +280,5 @@ body:has(.branded-shell){background-color:#edf3fb;background-image:radial-gradie
 .inventory-table-panel .inventory-staff-table th:nth-child(6){width:12%}
 .inventory-table-panel .inventory-staff-table th:nth-child(7){width:8%}
 .quote-doc-table td.quote-product-name{white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.35}
+.quote-line .quote-product-picker{display:grid;gap:6px}.quote-line .quote-product-search{position:relative;display:flex;align-items:center}.quote-line .quote-product-search>svg{position:absolute;left:11px;color:#8795a9;pointer-events:none}.quote-line .quote-product-search input{padding-left:34px}.quote-line .quote-product-picker>small{color:#8492a6;font-size:12px;font-weight:500}.quote-company{justify-content:center;flex-wrap:wrap;text-align:center}.quote-doc-header>p{margin:8px auto 0;text-align:center;line-height:1.5}.quote-doc-header h1{margin:7px 0 0;text-align:center}
 .quote-doc-table td{min-width:0}

@@ -340,13 +340,13 @@ app.get('/api/inventory',roles('admin','manager','staff'),asyncRoute(async(req,r
   const week=String(req.query.weekStart||'');const weekStart=/^\d{4}-\d{2}-\d{2}$/.test(week)?week:null;const admin=req.session.user!.role==='admin';
   const {rows}=await pool.query(`SELECT i.id,i.sku,btrim(i.name) AS name,i.brand,i.unit,i.sale_price_vnd AS "salePriceVnd",w.quantity AS "quantity",(w.id IS NOT NULL) AS "weekCounted",COALESCE(m."soldLast30Days",0) AS "soldLast30Days"${admin?',i.unit_cost_vnd AS "unitCostVnd",CASE WHEN w.id IS NOT NULL THEN w.quantity*i.unit_cost_vnd ELSE NULL END AS "weeklyValueVnd"':''} FROM inventory_items i LEFT JOIN inventory_weekly_counts w ON w.item_id=i.id AND w.week_start=$1::date LEFT JOIN LATERAL (SELECT sum(quantity) FILTER(WHERE movement_type='sold' AND created_at>=now()-interval '30 days') AS "soldLast30Days" FROM inventory_movements WHERE item_id=i.id) m ON true ORDER BY i.name`,[weekStart||new Date().toISOString().slice(0,10)]);
   const total=(await pool.query('SELECT COALESCE(sum(w.quantity*i.unit_cost_vnd),0)::bigint AS total FROM inventory_weekly_counts w JOIN inventory_items i ON i.id=w.item_id WHERE w.week_start=$1::date',[weekStart||new Date().toISOString().slice(0,10)])).rows[0].total;
-  const {rows:weeks}=await pool.query('SELECT DISTINCT week_start AS "weekStart" FROM inventory_weekly_counts ORDER BY week_start DESC');
-  res.json({items:rows,weeks:weeks.map((row:{weekStart:Date|string})=>String(row.weekStart).slice(0,10)),totalValueVnd:admin?total:undefined});
+  const {rows:weeks}=await pool.query("SELECT DISTINCT to_char(week_start,'YYYY-MM-DD') AS \"weekStart\" FROM inventory_weekly_counts ORDER BY \"weekStart\" DESC");
+  res.json({items:rows,weeks:weeks.map((row:{weekStart:string})=>row.weekStart),totalValueVnd:admin?total:undefined});
 }));
 app.get('/api/inventory/history',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
   const [{rows:weeks},{rows:items}]=await Promise.all([
     pool.query("SELECT DISTINCT to_char(week_start,'YYYY-MM-DD') AS \"weekStart\" FROM inventory_weekly_counts ORDER BY \"weekStart\" DESC"),
-    pool.query("SELECT item_id AS \"itemId\",to_char(week_start,'YYYY-MM-DD') AS \"weekStart\",quantity FROM inventory_weekly_counts ORDER BY week_start DESC,item_id")
+    pool.query("SELECT w.item_id AS \"itemId\",i.sku,to_char(w.week_start,'YYYY-MM-DD') AS \"weekStart\",w.quantity FROM inventory_weekly_counts w JOIN inventory_items i ON i.id=w.item_id ORDER BY w.week_start DESC,i.sku")
   ]);
   res.json({weeks:weeks.map((row:{weekStart:string})=>row.weekStart),items});
 }));
