@@ -258,7 +258,11 @@ body:has(.branded-shell){background-color:#edf3fb;background-image:radial-gradie
 .inventory-table-panel .inventory-current-table{width:100%;min-width:0;table-layout:fixed}
 .inventory-table-panel .inventory-current-table th{padding:9px 6px;font-size:11px;white-space:normal;line-height:1.25}
 .inventory-table-panel .inventory-current-table td{padding:9px 6px;font-size:12px;overflow-wrap:anywhere}
-.inventory-table-panel .inventory-current-table td:nth-child(2){line-height:1.35;word-break:break-word}
+.inventory-table-panel .inventory-current-table td:nth-child(2){line-height:1.35;word-break:normal;overflow-wrap:anywhere;white-space:normal}
+.inventory-table-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.inventory-search{display:flex;align-items:center;gap:8px;height:38px;min-width:210px;padding:0 10px;border:1px solid #cdd8e7;border-radius:8px;background:#fff;color:#71819a}
+.inventory-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#203653;font:inherit;font-size:13px}
+.inventory-search input::placeholder{color:#9aa7b8}
 .inventory-table-panel .inventory-current-table td:nth-child(4) input{width:100%;min-width:0}
 .inventory-table-panel .inventory-admin-table th:nth-child(1){width:7%}
 .inventory-table-panel .inventory-admin-table th:nth-child(2){width:23%}
