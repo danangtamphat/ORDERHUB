@@ -199,11 +199,20 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   quantity numeric(14,3) NOT NULL DEFAULT 0 CHECK (quantity >= 0),
   reorder_level numeric(14,3) NOT NULL DEFAULT 0 CHECK (reorder_level >= 0),
   unit_cost_vnd bigint NOT NULL DEFAULT 0 CHECK (unit_cost_vnd >= 0),
+  sale_price_vnd bigint NOT NULL DEFAULT 0 CHECK (sale_price_vnd >= 0),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS unit_cost_vnd bigint NOT NULL DEFAULT 0 CHECK (unit_cost_vnd >= 0);
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS sale_price_vnd bigint NOT NULL DEFAULT 0 CHECK (sale_price_vnd >= 0);
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS unit text NOT NULL DEFAULT 'cái';
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS brand text NOT NULL DEFAULT 'OEM';
+CREATE TABLE IF NOT EXISTS quote_settings (
+  id smallint PRIMARY KEY DEFAULT 1 CHECK (id=1),
+  wholesale_discount_percent numeric(5,2) NOT NULL DEFAULT 0 CHECK (wholesale_discount_percent >= 0 AND wholesale_discount_percent <= 100),
+  updated_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO quote_settings(id) VALUES(1) ON CONFLICT(id) DO NOTHING;
 CREATE TABLE IF NOT EXISTS inventory_movements (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   item_id uuid NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
