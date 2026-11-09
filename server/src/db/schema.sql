@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_email citext;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_grade smallint NOT NULL DEFAULT 2 CHECK (employee_grade BETWEEN 1 AND 3);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS hourly_rate_override_vnd integer CHECK (hourly_rate_override_vnd > 0);
 CREATE TABLE IF NOT EXISTS employee_profiles (
   user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   full_name text NOT NULL,
