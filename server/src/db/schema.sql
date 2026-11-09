@@ -195,7 +195,7 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   sku citext NOT NULL UNIQUE,
   name text NOT NULL,
   brand text NOT NULL DEFAULT 'OEM',
-  unit text NOT NULL DEFAULT 'cái',
+  unit text NOT NULL DEFAULT 'bộ',
   quantity numeric(14,3) NOT NULL DEFAULT 0 CHECK (quantity >= 0),
   reorder_level numeric(14,3) NOT NULL DEFAULT 0 CHECK (reorder_level >= 0),
   unit_cost_vnd bigint NOT NULL DEFAULT 0 CHECK (unit_cost_vnd >= 0),
@@ -204,7 +204,8 @@ CREATE TABLE IF NOT EXISTS inventory_items (
 );
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS unit_cost_vnd bigint NOT NULL DEFAULT 0 CHECK (unit_cost_vnd >= 0);
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS sale_price_vnd bigint NOT NULL DEFAULT 0 CHECK (sale_price_vnd >= 0);
-ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS unit text NOT NULL DEFAULT 'cái';
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS unit text NOT NULL DEFAULT 'bộ';
+ALTER TABLE inventory_items ALTER COLUMN unit SET DEFAULT 'bộ';
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS brand text NOT NULL DEFAULT 'OEM';
 CREATE TABLE IF NOT EXISTS quote_settings (
   id smallint PRIMARY KEY DEFAULT 1 CHECK (id=1),
