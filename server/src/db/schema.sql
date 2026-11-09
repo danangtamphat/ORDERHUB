@@ -194,6 +194,7 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   sku citext NOT NULL UNIQUE,
   name text NOT NULL,
+  brand text NOT NULL DEFAULT 'OEM',
   unit text NOT NULL DEFAULT 'cái',
   quantity numeric(14,3) NOT NULL DEFAULT 0 CHECK (quantity >= 0),
   reorder_level numeric(14,3) NOT NULL DEFAULT 0 CHECK (reorder_level >= 0),
@@ -202,6 +203,7 @@ CREATE TABLE IF NOT EXISTS inventory_items (
 );
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS unit_cost_vnd bigint NOT NULL DEFAULT 0 CHECK (unit_cost_vnd >= 0);
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS unit text NOT NULL DEFAULT 'cái';
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS brand text NOT NULL DEFAULT 'OEM';
 CREATE TABLE IF NOT EXISTS inventory_movements (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   item_id uuid NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
