@@ -344,9 +344,11 @@ app.get('/api/inventory',roles('admin','manager','staff'),asyncRoute(async(req,r
   res.json({items:rows,weeks:weeks.map((row:{weekStart:Date|string})=>String(row.weekStart).slice(0,10)),totalValueVnd:admin?total:undefined});
 }));
 app.get('/api/inventory/history',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
-  const week=String(req.query.weekStart||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(week))return res.status(400).json({error:'Tuần lịch sử không hợp lệ.'});
-  const {rows}=await pool.query(`SELECT w.item_id AS "itemId",i.sku,i.name,i.unit,w.quantity,w.updated_at AS "updatedAt",u.display_name AS "enteredBy" FROM inventory_weekly_counts w JOIN inventory_items i ON i.id=w.item_id JOIN users u ON u.id=w.entered_by WHERE w.week_start=$1::date ORDER BY i.name`,[week]);
-  res.json({items:rows});
+  const [{rows:weeks},{rows:items}]=await Promise.all([
+    pool.query("SELECT DISTINCT to_char(week_start,'YYYY-MM-DD') AS \"weekStart\" FROM inventory_weekly_counts ORDER BY \"weekStart\" DESC"),
+    pool.query("SELECT item_id AS \"itemId\",to_char(week_start,'YYYY-MM-DD') AS \"weekStart\",quantity FROM inventory_weekly_counts ORDER BY week_start DESC,item_id")
+  ]);
+  res.json({weeks:weeks.map((row:{weekStart:string})=>row.weekStart),items});
 }));
 app.post('/api/inventory/items',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
   const b=z.object({sku:z.string().trim().min(1).max(48).regex(/^[a-zA-Z0-9._-]+$/),name:z.string().trim().min(1).max(160),brand:z.string().trim().min(1).max(64).default('OEM'),unit:z.string().trim().min(1).max(24).default('bộ'),unitCostVnd:z.number().int().min(0).max(1e12).optional(),salePriceVnd:z.number().int().min(0).max(1e12).optional()}).safeParse(req.body);
@@ -361,7 +363,7 @@ app.delete('/api/inventory/items/:id',roles('admin','manager','staff'),asyncRout
 app.get('/api/quotes/catalog',roles('admin','manager','staff'),asyncRoute(async(_req,res)=>{const [{rows:items},{rows:settings}]=await Promise.all([pool.query('SELECT id,sku,btrim(name) AS name,brand,unit,sale_price_vnd AS "salePriceVnd" FROM inventory_items ORDER BY brand,name'),pool.query('SELECT wholesale_discount_percent AS "wholesaleDiscountPercent" FROM quote_settings WHERE id=1')]);res.json({items,wholesaleDiscountPercent:Number(settings[0]?.wholesaleDiscountPercent||0)})}));
 app.put('/api/quotes/settings',roles('admin'),asyncRoute(async(req,res)=>{const b=z.object({wholesaleDiscountPercent:z.number().min(0).max(100)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Chiết khấu sỉ phải từ 0% đến 100%.'});await pool.query('INSERT INTO quote_settings(id,wholesale_discount_percent,updated_by,updated_at) VALUES(1,$1,$2,now()) ON CONFLICT(id) DO UPDATE SET wholesale_discount_percent=EXCLUDED.wholesale_discount_percent,updated_by=EXCLUDED.updated_by,updated_at=now()',[b.data.wholesaleDiscountPercent,req.session.user!.id]);res.json({wholesaleDiscountPercent:b.data.wholesaleDiscountPercent})}));
 app.put('/api/inventory/weekly-counts',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
-  const b=z.object({weekStart:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),counts:z.array(z.object({itemId:z.string().uuid(),quantity:z.number().min(0).max(1e9)})).max(1000)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Tuần hoặc số lượng tồn kho không hợp lệ.'});
+  const b=z.object({weekStart:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),counts:z.array(z.object({itemId:z.string().uuid(),quantity:z.number().int().min(0).max(1e9)})).max(1000)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Tuần hoặc số lượng tồn kho không hợp lệ. Chỉ chấp nhận số nguyên không âm.'});
   const client=await pool.connect();try{await client.query('BEGIN');for(const row of b.data.counts){const exists=await client.query('SELECT id FROM inventory_items WHERE id=$1',[row.itemId]);if(!exists.rowCount)continue;await client.query('INSERT INTO inventory_weekly_counts(item_id,week_start,quantity,entered_by) VALUES($1,$2,$3,$4) ON CONFLICT(item_id,week_start) DO UPDATE SET quantity=EXCLUDED.quantity,entered_by=EXCLUDED.entered_by,updated_at=now()',[row.itemId,b.data.weekStart,row.quantity,req.session.user!.id]);await client.query('UPDATE inventory_items SET quantity=$1,updated_at=now() WHERE id=$2',[row.quantity,row.itemId]);}await client.query('COMMIT');res.json({ok:true,count:b.data.counts.length})}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
 }));
 app.get('/api/reports/orders.csv',asyncRoute(async(req,res)=>{

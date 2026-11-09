@@ -234,4 +234,5 @@ CREATE TABLE IF NOT EXISTS inventory_weekly_counts (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(item_id,week_start)
 );
+ALTER TABLE inventory_weekly_counts ALTER COLUMN quantity TYPE bigint USING round(quantity)::bigint;
 CREATE INDEX IF NOT EXISTS inventory_weekly_counts_week_idx ON inventory_weekly_counts(week_start,item_id);
