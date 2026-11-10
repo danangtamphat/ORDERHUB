@@ -365,6 +365,10 @@ app.delete('/api/warranties/:id',roles('admin'),asyncRoute(async(req,res)=>{
   if(!rowCount)return res.status(404).json({error:'Không tìm thấy hồ sơ bảo hành.'});
   res.status(204).end();
 }));
+app.delete('/api/warranties/dealer-reconciliation',roles('admin'),asyncRoute(async(req,res)=>{
+  const b=z.object({dealer:z.enum(warrantyDealers),productCode:z.string().trim().min(1).max(80)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Đại lý và mã hàng đối chiếu không hợp lệ.'});
+  const client=await pool.connect();try{await client.query('BEGIN');const cases=await client.query(`DELETE FROM warranty_cases WHERE dealer=$1 AND lower(btrim(product_code))=lower(btrim($2)) RETURNING id`,[b.data.dealer,b.data.productCode]);const movements=await client.query(`DELETE FROM warranty_dealer_movements WHERE dealer=$1 AND lower(btrim(product_code))=lower(btrim($2)) RETURNING id`,[b.data.dealer,b.data.productCode]);await client.query('COMMIT');if(!cases.rowCount&&!movements.rowCount)return res.status(404).json({error:'Không còn dữ liệu đối chiếu cho mã hàng này.'});res.json({deletedCases:cases.rowCount||0,deletedMovements:movements.rowCount||0});}catch(error){await client.query('ROLLBACK');throw error}finally{client.release()}
+}));
 app.get('/api/warranties/dealer-movements',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
   const {rows}=await pool.query(`SELECT m.id,m.dealer,m.direction,to_char(m.movement_date,'YYYY-MM-DD') AS "movementDate",m.product_code AS "productCode",m.product_name AS "productName",m.quantity,m.note,u.display_name AS "employeeName" FROM warranty_dealer_movements m JOIN users u ON u.id=m.created_by ORDER BY m.movement_date DESC,m.created_at DESC`);res.json({movements:rows});
 }));

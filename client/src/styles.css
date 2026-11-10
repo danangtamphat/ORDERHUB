@@ -309,3 +309,14 @@ body:has(.branded-shell){background-color:#edf3fb;background-image:radial-gradie
 .warranty-batch-actions{justify-content:flex-end}
 .warranty-dealer-groups{display:grid;gap:12px;margin-top:14px}.warranty-dealer-group{padding:12px;border:1px solid #dbe6f4;border-radius:12px;background:#f7faff}.warranty-dealer-group:nth-child(even){border-color:#f1d8bd;background:#fff9f1}.warranty-dealer-group h4{display:flex;align-items:center;gap:8px;margin:0 0 10px;color:#234675;font-size:14px}.warranty-dealer-group h4 svg{color:#4765de}.warranty-dealer-group h4 span{margin-left:auto;padding:4px 9px;border-radius:99px;background:#e9efff;color:#315ac4;font-size:11px}.warranty-dealer-group:nth-child(even) h4 span{background:#fff0df;color:#a65300}.warranty-dealer-group .warranty-flow-grid{margin-top:0}.warranty-dealer-divider th{padding:8px 12px!important;background:#edf3fc!important;color:#244a7b!important;font-weight:750;text-align:left}.warranty-dealer-divider:nth-of-type(4n+2) th{background:#fff1e2!important;color:#95510c!important}.warranty-expired-note{border-color:#f2c4c1;background:#fff1f0;color:#b43333}
 @media(max-width:760px){.warranty-tab-content{padding:7px}.warranty-batch-head{grid-template-columns:1fr 1fr}.warranty-batch-note{grid-column:1/-1}.warranty-dispatch-actions{align-items:flex-start;flex-direction:column}.warranty-line-heading,.warranty-line-item{grid-template-columns:minmax(120px,1fr) minmax(100px,.6fr) 34px}}
+
+/* Navigation should wrap instead of clipping tabs. */
+.branded-shell .horizontal-nav{flex-wrap:wrap;overflow:visible;gap:2px 4px;min-height:0;padding-bottom:0}
+.branded-shell .horizontal-nav-item{flex:0 1 auto;padding:11px 11px 9px;font-size:13.5px}
+.warranty-phone-history{grid-column:span 2;display:flex;align-items:flex-start;gap:9px;padding:10px 12px;border:1px solid #f1d29b;border-radius:9px;background:#fff9eb;color:#805400;font-size:12px}
+.warranty-phone-history>svg{flex:none;margin-top:1px;color:#d28a14}
+.warranty-phone-history b,.warranty-phone-history span,.warranty-phone-history small{display:block}
+.warranty-phone-history span{margin-top:4px;color:#655b48}
+.warranty-phone-history small{margin-top:4px;color:#8a795c}
+.warranty-delete{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+@media(max-width:760px){.branded-shell .horizontal-nav{gap:0 2px}.branded-shell .horizontal-nav-item{padding:9px 8px 7px;font-size:12px}.warranty-phone-history{grid-column:1/-1}}
