@@ -233,6 +233,7 @@ CREATE TABLE IF NOT EXISTS warranty_cases (
   created_at timestamptz NOT NULL DEFAULT now(),
   CHECK ((customer_return_tracking_code IS NULL) = (customer_returned_at IS NULL))
 );
+ALTER TABLE warranty_cases ALTER COLUMN product_name DROP NOT NULL;
 CREATE INDEX IF NOT EXISTS warranty_cases_dealer_due_idx ON warranty_cases(dealer,received_at);
 CREATE INDEX IF NOT EXISTS warranty_cases_creator_received_idx ON warranty_cases(created_by,received_at DESC);
 CREATE TABLE IF NOT EXISTS warranty_dealer_movements (
