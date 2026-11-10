@@ -46,6 +46,7 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_reconciled boolean NOT NULL DE
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS reconciled_by uuid REFERENCES users(id);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS reconciled_at timestamptz;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_status text CHECK (admin_status IN ('pending','delivered','returned'));
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_cod_amount_vnd bigint CHECK (admin_cod_amount_vnd >= 0);
 UPDATE orders SET admin_status='delivered' WHERE admin_reconciled=true AND admin_status IS NULL;
 UPDATE orders SET delivered_at=updated_at WHERE status='delivered' AND delivered_at IS NULL;
 CREATE TABLE IF NOT EXISTS assigned_tasks (
