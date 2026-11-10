@@ -217,6 +217,37 @@ CREATE TABLE IF NOT EXISTS quote_settings (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO quote_settings(id) VALUES(1) ON CONFLICT(id) DO NOTHING;
+CREATE TABLE IF NOT EXISTS warranty_cases (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_by uuid NOT NULL REFERENCES users(id),
+  product_code text NOT NULL,
+  product_name text NOT NULL,
+  issue text NOT NULL,
+  customer_phone text NOT NULL,
+  sale_date date NOT NULL,
+  warranty_valid boolean NOT NULL,
+  dealer text NOT NULL CHECK (dealer IN ('ONVIZ','An Camera','GOGA','Thành Nam','Mai Linh','Khác')),
+  received_at timestamptz NOT NULL DEFAULT now(),
+  customer_return_tracking_code text,
+  customer_returned_at date,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CHECK ((customer_return_tracking_code IS NULL) = (customer_returned_at IS NULL))
+);
+CREATE INDEX IF NOT EXISTS warranty_cases_dealer_due_idx ON warranty_cases(dealer,received_at);
+CREATE INDEX IF NOT EXISTS warranty_cases_creator_received_idx ON warranty_cases(created_by,received_at DESC);
+CREATE TABLE IF NOT EXISTS warranty_dealer_movements (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  dealer text NOT NULL CHECK (dealer IN ('ONVIZ','An Camera','GOGA','Thành Nam','Mai Linh','Khác')),
+  direction text NOT NULL CHECK (direction IN ('sent','received')),
+  movement_date date NOT NULL,
+  product_code text NOT NULL,
+  product_name text NOT NULL,
+  quantity integer NOT NULL CHECK (quantity > 0),
+  note text NOT NULL DEFAULT '',
+  created_by uuid NOT NULL REFERENCES users(id),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS warranty_dealer_movements_lookup_idx ON warranty_dealer_movements(dealer,product_code,movement_date);
 CREATE TABLE IF NOT EXISTS inventory_movements (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   item_id uuid NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
