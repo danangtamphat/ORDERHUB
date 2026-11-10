@@ -249,6 +249,27 @@ CREATE TABLE IF NOT EXISTS warranty_dealer_movements (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS warranty_dealer_movements_lookup_idx ON warranty_dealer_movements(dealer,product_code,movement_date);
+CREATE TABLE IF NOT EXISTS warranty_case_dispatches (
+  case_id uuid PRIMARY KEY REFERENCES warranty_cases(id) ON DELETE CASCADE,
+  movement_id uuid NOT NULL REFERENCES warranty_dealer_movements(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+WITH case_units AS (
+  SELECT id, dealer, lower(btrim(product_code)) AS product_code,
+         row_number() OVER (PARTITION BY dealer, lower(btrim(product_code)) ORDER BY received_at, id) AS unit_no
+  FROM warranty_cases
+), sent_units AS (
+  SELECT m.id AS movement_id, m.dealer, lower(btrim(m.product_code)) AS product_code,
+         sum(m.quantity) OVER (PARTITION BY m.dealer, lower(btrim(m.product_code)) ORDER BY m.movement_date, m.created_at, m.id ROWS UNBOUNDED PRECEDING) - m.quantity + g.unit_no AS unit_no
+  FROM warranty_dealer_movements m
+  CROSS JOIN LATERAL generate_series(1, m.quantity) AS g(unit_no)
+  WHERE m.direction = 'sent'
+)
+INSERT INTO warranty_case_dispatches(case_id, movement_id)
+SELECT c.id, s.movement_id
+FROM case_units c
+JOIN sent_units s USING (dealer, product_code, unit_no)
+ON CONFLICT (case_id) DO NOTHING;
 CREATE TABLE IF NOT EXISTS inventory_movements (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   item_id uuid NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
