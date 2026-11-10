@@ -171,6 +171,7 @@ CREATE TABLE IF NOT EXISTS payroll_penalties (
   period_start date NOT NULL,
   violation_date date NOT NULL DEFAULT ((now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date),
   description text NOT NULL,
+  note text NOT NULL DEFAULT '',
   points numeric(8,2) NOT NULL DEFAULT 0 CHECK (points >= 0),
   fine_amount_vnd bigint NOT NULL DEFAULT 0 CHECK (fine_amount_vnd >= 0),
   created_by uuid REFERENCES users(id) ON DELETE SET NULL,
@@ -178,6 +179,7 @@ CREATE TABLE IF NOT EXISTS payroll_penalties (
   CHECK (points > 0 OR fine_amount_vnd > 0)
 );
 ALTER TABLE payroll_penalties ADD COLUMN IF NOT EXISTS violation_date date;
+ALTER TABLE payroll_penalties ADD COLUMN IF NOT EXISTS note text NOT NULL DEFAULT '';
 UPDATE payroll_penalties SET violation_date=(created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date WHERE violation_date IS NULL;
 ALTER TABLE payroll_penalties ALTER COLUMN violation_date SET DEFAULT ((now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date);
 ALTER TABLE payroll_penalties ALTER COLUMN violation_date SET NOT NULL;
