@@ -143,18 +143,15 @@ app.get('/api/orders/daily-sales',roles('admin'),asyncRoute(async(_req,res)=>{
   const {rows}=await pool.query(`WITH order_groups AS (
     SELECT COALESCE(share_group_id,id) AS group_id,
       SUM(amount_vnd)::bigint AS amount_vnd,
-      MIN(delivered_at) AS delivered_at,
-      BOOL_AND(status='delivered') AS employee_delivered,
-      BOOL_AND(admin_reconciled AND admin_status='delivered') AS admin_delivered
+      MIN(created_at) AS created_at
     FROM orders
     GROUP BY COALESCE(share_group_id,id)
   ), daily AS (
-    SELECT (delivered_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS sale_date,
+    SELECT (created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS sale_date,
       SUM(amount_vnd)::bigint AS sales_vnd,
       COUNT(*)::int AS order_count
     FROM order_groups
-    WHERE employee_delivered AND admin_delivered AND delivered_at IS NOT NULL
-    GROUP BY (delivered_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+    GROUP BY (created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
   ), calendar AS (
     SELECT generate_series(
       (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - 6,
@@ -254,6 +251,7 @@ app.get('/api/tasks/assignment-notifications',asyncRoute(async(req,res)=>{
 app.get('/api/schedules',asyncRoute(async(req,res)=>{
   if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});
   const {month='',year='',userId=''}=req.query as Record<string,string>;const args:unknown[]=[];const where:string[]=[];const actor=req.session.user;
+  where.push('u.active=true');
   if(actor.role!=='admin'){args.push(actor.id);where.push(`s.user_id=$${args.length}`)}else if(userId){args.push(userId);where.push(`s.user_id=$${args.length}`)}
   if(/^\d{1,2}$/.test(month)&&/^\d{4}$/.test(year)){args.push(`${year}-${month.padStart(2,'0')}-01`);where.push(`s.work_date >= $${args.length}::date AND s.work_date < ($${args.length}::date + interval '1 month')`)}
   const {rows}=await pool.query(`SELECT s.id,s.user_id AS "userId",u.username,u.display_name AS "displayName",to_char(s.work_date,'YYYY-MM-DD') AS "workDate",s.shift,(a.id IS NOT NULL) AS attended FROM work_schedules s JOIN users u ON u.id=s.user_id LEFT JOIN attendance a ON a.user_id=s.user_id AND a.work_date=s.work_date ${where.length?'WHERE '+where.join(' AND '):''} ORDER BY s.work_date,s.shift,u.display_name`,args);res.json({schedules:rows});
