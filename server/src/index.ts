@@ -415,10 +415,11 @@ app.get('/api/sims',roles('admin','manager','staff'),asyncRoute(async(req,res)=>
   res.json({sims:list.rows,summary:summary.rows});
 }));
 app.post('/api/sims',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
-  const b=z.object({carrier:z.enum(['Viettel','Mobile','Vina']),serial:z.string().trim().min(5).max(40),status:z.enum(['in_stock','sold','returned']).default('in_stock'),orderCode:z.string().trim().max(80).default(''),note:z.string().trim().max(300).default('')}).safeParse(req.body);
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const b=z.object({carrier:z.enum(['Viettel','Mobile','Vina']),serial:z.string().trim().min(5).max(40),status:z.enum(['in_stock','sold','returned']).default('in_stock'),orderCode:z.string().trim().max(80).default(''),note:z.string().trim().max(300).default(''),entryDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).default(today)}).safeParse(req.body);
   if(!b.success)return res.status(400).json({error:'Nhập nhà mạng và số seri hợp lệ.'});
   if(b.data.status==='sold'&&!b.data.orderCode)return res.status(400).json({error:'SIM đã bán cần có mã đơn hàng.'});
-  try{const {rows}=await pool.query(`INSERT INTO sim_cards(carrier,serial,status,order_code,note,sold_at) VALUES($1,$2,$3,$4,$5,CASE WHEN $3='sold' THEN now() ELSE NULL END) RETURNING id`,[b.data.carrier,b.data.serial,b.data.status,b.data.orderCode,b.data.note]);res.status(201).json({id:rows[0].id})}catch(e){if((e as {code?:string}).code==='23505')return res.status(409).json({error:'Số seri SIM này đã tồn tại.'});throw e}
+  try{const {rows}=await pool.query(`INSERT INTO sim_cards(carrier,serial,status,order_code,note,sold_at,created_at) VALUES($1,$2,$3,$4,$5,CASE WHEN $3='sold' THEN now() ELSE NULL END,$6::date::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh') RETURNING id`,[b.data.carrier,b.data.serial,b.data.status,b.data.orderCode,b.data.note,b.data.entryDate]);res.status(201).json({id:rows[0].id})}catch(e){if((e as {code?:string}).code==='23505')return res.status(409).json({error:'Số seri SIM này đã tồn tại.'});throw e}
 }));
 app.patch('/api/sims/:id',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
   const b=z.object({carrier:z.enum(['Viettel','Mobile','Vina']),serial:z.string().trim().min(5).max(40),status:z.enum(['in_stock','sold','returned']),orderCode:z.string().trim().max(80).default(''),note:z.string().trim().max(300).default('')}).safeParse(req.body);
