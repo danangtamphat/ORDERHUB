@@ -220,6 +220,25 @@ CREATE TABLE IF NOT EXISTS quote_settings (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO quote_settings(id) VALUES(1) ON CONFLICT(id) DO NOTHING;
+CREATE TABLE IF NOT EXISTS saved_quotes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  customer_type text NOT NULL CHECK (customer_type IN ('retail','wholesale')),
+  customer_name text NOT NULL,
+  customer_address text NOT NULL DEFAULT '',
+  recipient text NOT NULL DEFAULT '',
+  customer_phone text NOT NULL DEFAULT '',
+  quote_date date NOT NULL,
+  items jsonb NOT NULL CHECK (jsonb_typeof(items) = 'array' AND jsonb_array_length(items) > 0),
+  subtotal_vnd bigint NOT NULL CHECK (subtotal_vnd >= 0),
+  shipping_vnd bigint NOT NULL DEFAULT 0 CHECK (shipping_vnd >= 0),
+  total_vnd bigint NOT NULL CHECK (total_vnd >= 0),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS saved_quotes_customer_created_idx
+  ON saved_quotes (lower(customer_name), created_at DESC);
+CREATE INDEX IF NOT EXISTS saved_quotes_created_by_idx
+  ON saved_quotes (created_by, created_at DESC);
 CREATE TABLE IF NOT EXISTS warranty_cases (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   created_by uuid NOT NULL REFERENCES users(id),

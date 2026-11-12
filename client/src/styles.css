@@ -344,3 +344,13 @@ html, body, body * { font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-seri
 .warranty-history-line{padding:8px;border:1px solid #dce6f2;border-radius:9px;background:#fff}
 @media(max-width:900px){.sim-fields{grid-template-columns:minmax(180px,1fr) minmax(130px,1fr)}.sim-fields .sim-add-button{grid-column:2}.warranty-history-line-heading,.warranty-history-line{grid-template-columns:minmax(130px,1fr) minmax(160px,1.2fr) 100px 34px}}
 @media(max-width:600px){.sim-fields,.warranty-history-line-heading,.warranty-history-line{grid-template-columns:1fr}.sim-fields .sim-add-button{grid-column:auto}.warranty-history-line-heading{display:none}.warranty-history-line .icon-btn{justify-self:end}}
+
+/* Admin daily sales chart */
+.daily-sales-panel{margin:0 0 20px;padding:20px 22px;background:linear-gradient(135deg,#fff 0%,#f8fbff 100%)}
+.daily-sales-panel .panel-head{align-items:center;margin-bottom:12px}
+.daily-sales-panel .panel-head h2{display:flex;align-items:center;gap:8px;margin:0 0 5px;color:#183b70;font-size:18px}
+.daily-sales-panel .panel-head h2 svg{color:#10a878}
+.daily-sales-panel .panel-head p{margin:0;color:#8191aa;font-size:13px}
+.daily-sales-total{color:#07986e;font-size:20px;white-space:nowrap}
+.daily-sales-chart{width:100%;height:230px}
+@media(max-width:640px){.daily-sales-panel{padding:16px 12px}.daily-sales-panel .panel-head{align-items:flex-start;gap:10px}.daily-sales-total{font-size:16px}.daily-sales-chart{height:210px}}
