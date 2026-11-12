@@ -392,11 +392,17 @@ app.post('/api/warranties/dealer-movements/batch',roles('admin','manager','staff
   const inventory=await resolveInventorySkus([...merged.values()].map(item=>item.code));const unknown=[...merged.values()].filter(item=>!inventory.has(item.code.toLocaleLowerCase()));if(unknown.length)return res.status(400).json({error:`Mã hàng chưa có trong danh mục tồn kho: ${unknown.map(item=>item.code).join(', ')}.`});
   const client=await pool.connect();try{await client.query('BEGIN');for(const item of merged.values()){const product=inventory.get(item.code.toLocaleLowerCase())!;await client.query(`INSERT INTO warranty_dealer_movements(dealer,direction,movement_date,product_code,product_name,quantity,note,created_by) VALUES($1,'received',$2::date,$3,$4,$5,$6,$7)`,[b.data.dealer,b.data.movementDate,product.sku,product.name,item.quantity,b.data.note,req.session.user!.id])}await client.query('COMMIT');res.status(201).json({count:merged.size})}catch(error){await client.query('ROLLBACK');throw error}finally{client.release()}
 }));
+app.post('/api/warranties/dealer-movements/historical-batch',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
+  const b=z.object({dealer:z.enum(warrantyDealers),movementDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),items:z.array(z.object({productCode:z.string().trim().min(1).max(80),productName:z.string().trim().min(1).max(200),quantity:z.number().int().min(1).max(1000000)})).min(1).max(200),note:z.string().max(300).default('')}).safeParse(req.body);
+  if(!b.success)return res.status(400).json({error:'Vui lòng nhập đại lý, ngày gửi, từng mã hàng, tên hàng và số lượng nguyên dương.'});
+  const merged=new Map<string,{code:string;name:string;quantity:number}>();for(const item of b.data.items){const key=item.productCode.toLocaleLowerCase();const row=merged.get(key)||{code:item.productCode,name:item.productName,quantity:0};row.quantity+=item.quantity;if(row.quantity>1000000)return res.status(400).json({error:`Số lượng mã ${item.productCode} vượt giới hạn.`});merged.set(key,row)}
+  const client=await pool.connect();try{await client.query('BEGIN');for(const item of merged.values())await client.query(`INSERT INTO warranty_dealer_movements(dealer,direction,movement_date,product_code,product_name,quantity,note,created_by) VALUES($1,'sent',$2::date,$3,$4,$5,$6,$7)`,[b.data.dealer,b.data.movementDate,item.code,item.name,item.quantity,b.data.note,req.session.user!.id]);await client.query('COMMIT');res.status(201).json({count:merged.size})}catch(error){await client.query('ROLLBACK');throw error}finally{client.release()}
+}));
 app.post('/api/warranties/dealer-movements/dispatch-open',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
   const b=z.object({dealer:z.enum(warrantyDealers).optional(),movementDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Thông tin gửi bảo hành không hợp lệ.'});
   const client=await pool.connect();try{await client.query('BEGIN');await client.query("SELECT pg_advisory_xact_lock(hashtext('warranty_dispatch_open'))");const {rows}=await client.query(`SELECT c.dealer,min(c.product_code) AS product_code,i.name AS product_name,count(*)::int AS quantity,array_agg(c.id) AS case_ids FROM warranty_cases c JOIN inventory_items i ON lower(btrim(i.sku))=lower(btrim(c.product_code)) WHERE c.customer_returned_at IS NULL AND c.dealer<>'Mai Linh' AND ($1::text IS NULL OR c.dealer=$1) AND NOT EXISTS(SELECT 1 FROM warranty_case_dispatches d WHERE d.case_id=c.id) GROUP BY c.dealer,lower(btrim(c.product_code)),i.name ORDER BY c.dealer,min(c.product_code)`,[b.data.dealer||null]);for(const item of rows){const sent=await client.query(`INSERT INTO warranty_dealer_movements(dealer,direction,movement_date,product_code,product_name,quantity,note,created_by) VALUES($1,'sent',$2::date,$3,$4,$5,'Gộp tự động từ hồ sơ bảo hành khách',$6) RETURNING id`,[item.dealer,b.data.movementDate,item.product_code,item.product_name,item.quantity,req.session.user!.id]);await client.query('INSERT INTO warranty_case_dispatches(case_id,movement_id) SELECT unnest($1::uuid[]),$2',[item.case_ids,sent.rows[0].id])}await client.query('COMMIT');res.status(201).json({count:rows.length})}catch(error){await client.query('ROLLBACK');throw error}finally{client.release()}
 }));
-app.get('/api/sims',roles('admin'),asyncRoute(async(req,res)=>{
+app.get('/api/sims',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
   const q=String(req.query.q||'').trim(),carrier=String(req.query.carrier||''),status=String(req.query.status||'');
   const values:unknown[]=[];const where:string[]=[];
   if(q){values.push(`%${q}%`);where.push(`(serial ILIKE $${values.length} OR COALESCE(order_code,'') ILIKE $${values.length})`)}
@@ -408,14 +414,16 @@ app.get('/api/sims',roles('admin'),asyncRoute(async(req,res)=>{
   ]);
   res.json({sims:list.rows,summary:summary.rows});
 }));
-app.post('/api/sims',roles('admin'),asyncRoute(async(req,res)=>{
+app.post('/api/sims',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
   const b=z.object({carrier:z.enum(['Viettel','Mobile','Vina']),serial:z.string().trim().min(5).max(40),status:z.enum(['in_stock','sold','returned']).default('in_stock'),orderCode:z.string().trim().max(80).default(''),note:z.string().trim().max(300).default('')}).safeParse(req.body);
   if(!b.success)return res.status(400).json({error:'Nhập nhà mạng và số seri hợp lệ.'});
+  if(b.data.status==='sold'&&!b.data.orderCode)return res.status(400).json({error:'SIM đã bán cần có mã đơn hàng.'});
   try{const {rows}=await pool.query(`INSERT INTO sim_cards(carrier,serial,status,order_code,note,sold_at) VALUES($1,$2,$3,$4,$5,CASE WHEN $3='sold' THEN now() ELSE NULL END) RETURNING id`,[b.data.carrier,b.data.serial,b.data.status,b.data.orderCode,b.data.note]);res.status(201).json({id:rows[0].id})}catch(e){if((e as {code?:string}).code==='23505')return res.status(409).json({error:'Số seri SIM này đã tồn tại.'});throw e}
 }));
-app.patch('/api/sims/:id',roles('admin'),asyncRoute(async(req,res)=>{
+app.patch('/api/sims/:id',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
   const b=z.object({carrier:z.enum(['Viettel','Mobile','Vina']),serial:z.string().trim().min(5).max(40),status:z.enum(['in_stock','sold','returned']),orderCode:z.string().trim().max(80).default(''),note:z.string().trim().max(300).default('')}).safeParse(req.body);
   if(!b.success)return res.status(400).json({error:'Thông tin SIM không hợp lệ.'});
+  if(b.data.status==='sold'&&!b.data.orderCode)return res.status(400).json({error:'SIM đã bán cần có mã đơn hàng.'});
   try{const result=await pool.query(`UPDATE sim_cards SET carrier=$2,serial=$3,status=$4,order_code=$5,note=$6,sold_at=CASE WHEN $4='sold' THEN COALESCE(sold_at,now()) ELSE NULL END,updated_at=now() WHERE id=$1`,[req.params.id,b.data.carrier,b.data.serial,b.data.status,b.data.orderCode,b.data.note]);if(!result.rowCount)return res.status(404).json({error:'Không tìm thấy SIM.'});res.json({ok:true})}catch(e){if((e as {code?:string}).code==='23505')return res.status(409).json({error:'Số seri SIM này đã tồn tại.'});throw e}
 }));
 app.delete('/api/sims/:id',roles('admin'),asyncRoute(async(req,res)=>{const result=await pool.query('DELETE FROM sim_cards WHERE id=$1',[req.params.id]);if(!result.rowCount)return res.status(404).json({error:'Không tìm thấy SIM.'});res.status(204).end()}));
