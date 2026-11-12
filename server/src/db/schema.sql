@@ -252,6 +252,19 @@ CREATE TABLE IF NOT EXISTS warranty_dealer_movements (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS warranty_dealer_movements_lookup_idx ON warranty_dealer_movements(dealer,product_code,movement_date);
+CREATE TABLE IF NOT EXISTS sim_cards (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  carrier text NOT NULL CHECK (carrier IN ('Viettel','Mobile','Vina')),
+  serial text NOT NULL,
+  status text NOT NULL DEFAULT 'in_stock' CHECK (status IN ('in_stock','sold','returned')),
+  order_code text NOT NULL DEFAULT '',
+  note text NOT NULL DEFAULT '',
+  sold_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS sim_cards_serial_unique_idx ON sim_cards(lower(btrim(serial)));
+CREATE INDEX IF NOT EXISTS sim_cards_status_carrier_idx ON sim_cards(status,carrier);
 CREATE TABLE IF NOT EXISTS warranty_case_dispatches (
   case_id uuid PRIMARY KEY REFERENCES warranty_cases(id) ON DELETE CASCADE,
   movement_id uuid NOT NULL REFERENCES warranty_dealer_movements(id) ON DELETE CASCADE,
