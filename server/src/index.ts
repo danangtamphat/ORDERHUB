@@ -166,6 +166,24 @@ app.get('/api/orders/daily-sales',roles('admin'),asyncRoute(async(_req,res)=>{
   ORDER BY calendar.sale_date`);
   res.json({days:rows});
 }));
+app.get('/api/orders/monthly-status',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
+  const user=req.session.user!;
+  const month=(await pool.query(`SELECT to_char(now() AT TIME ZONE 'Asia/Ho_Chi_Minh','YYYY-MM') AS month`)).rows[0].month as string;
+  const args:unknown[]=[month];
+  const ownerFilter=user.role==='staff'?'AND owner_user_id=$2':'';
+  if(user.role==='staff')args.push(user.id);
+  const {rows}=await pool.query(`SELECT
+    COUNT(*) FILTER (WHERE status='delivered')::int AS delivered,
+    COUNT(*) FILTER (WHERE status='pending')::int AS pending,
+    COUNT(*) FILTER (WHERE status='returned')::int AS returned
+    FROM (SELECT DISTINCT ON (COALESCE(share_group_id,id)) COALESCE(share_group_id,id) AS group_id,status
+      FROM orders
+      WHERE created_at >= (to_date($1 || '-01','YYYY-MM-DD')::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')
+        AND created_at < ((to_date($1 || '-01','YYYY-MM-DD') + interval '1 month')::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')
+        ${ownerFilter}
+      ORDER BY COALESCE(share_group_id,id),updated_at DESC,id) monthly_orders`,args);
+  res.json({month,...rows[0]});
+}));
 app.patch('/api/orders/:id/reconcile',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({reconciled:z.boolean()}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Trạng thái đối soát không hợp lệ.'});
   const client=await pool.connect();let inTransaction=false;try{
@@ -483,6 +501,7 @@ app.patch('/api/inventory/items/:id',roles('admin','manager','staff'),asyncRoute
 app.delete('/api/inventory/items/:id',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{const {rowCount}=await pool.query('DELETE FROM inventory_items WHERE id=$1',[req.params.id]);if(!rowCount)return res.status(404).json({error:'Không tìm thấy mã hàng.'});res.status(204).end()}));
 app.get('/api/quotes/catalog',roles('admin','manager','staff'),asyncRoute(async(_req,res)=>{const [{rows:items},{rows:settings}]=await Promise.all([pool.query('SELECT id,sku,btrim(name) AS name,brand,unit,sale_price_vnd AS "salePriceVnd" FROM inventory_items ORDER BY brand,name'),pool.query('SELECT wholesale_discount_percent AS "wholesaleDiscountPercent" FROM quote_settings WHERE id=1')]);res.json({items,wholesaleDiscountPercent:Number(settings[0]?.wholesaleDiscountPercent||0)})}));
 app.get('/api/quotes',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{const q=String(req.query.q||'').trim();const args:unknown[]=[];const where:string[]=[];if(req.session.user!.role==='staff'){args.push(req.session.user!.id);where.push(`created_by=$${args.length}`)}if(q){args.push(`%${q}%`);where.push(`(customer_name ILIKE $${args.length} OR customer_phone ILIKE $${args.length})`)}const {rows}=await pool.query(`SELECT id,customer_type AS "customerType",customer_name AS "customerName",customer_address AS "customerAddress",recipient,customer_phone AS "customerPhone",quote_date AS "quoteDate",items,subtotal_vnd AS "subtotalVnd",shipping_vnd AS "shippingVnd",total_vnd AS "totalVnd",created_at AS "createdAt" FROM saved_quotes ${where.length?'WHERE '+where.join(' AND '):''} ORDER BY created_at DESC LIMIT 100`,args);res.json({quotes:rows})}));
+app.delete('/api/quotes/:id',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{const user=req.session.user!;const args:unknown[]=[req.params.id];const scope=user.role==='staff'?' AND created_by=$2':'';if(user.role==='staff')args.push(user.id);const result=await pool.query(`DELETE FROM saved_quotes WHERE id=$1${scope}`,args);if(!result.rowCount)return res.status(404).json({error:'Không tìm thấy báo giá hoặc bạn không có quyền xóa.'});res.status(204).end()}));
 app.post('/api/quotes',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{const b=z.object({customerType:z.enum(['retail','wholesale']),customerName:z.string().trim().min(1).max(160),customerAddress:z.string().max(300).default(''),recipient:z.string().max(160).default(''),customerPhone:z.string().max(40).default(''),quoteDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),shippingVnd:z.number().int().min(0).max(1e12),items:z.array(z.object({sku:z.string().trim().min(1).max(48),name:z.string().trim().min(1).max(200),brand:z.string().max(80),unit:z.string().max(30),quantity:z.number().int().min(1).max(1e6),unitPriceVnd:z.number().int().min(0).max(1e12)})).min(1).max(100)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Kiểm tra tên khách hàng và ít nhất một sản phẩm hợp lệ.'});const subtotal=b.data.items.reduce((sum,item)=>sum+Math.round(item.quantity*item.unitPriceVnd),0);const total=subtotal+b.data.shippingVnd;const {rows}=await pool.query(`INSERT INTO saved_quotes(created_by,customer_type,customer_name,customer_address,recipient,customer_phone,quote_date,items,subtotal_vnd,shipping_vnd,total_vnd) VALUES($1,$2,$3,$4,$5,$6,$7::date,$8::jsonb,$9,$10,$11) RETURNING id`,[req.session.user!.id,b.data.customerType,b.data.customerName,b.data.customerAddress,b.data.recipient,b.data.customerPhone,b.data.quoteDate,JSON.stringify(b.data.items),subtotal,b.data.shippingVnd,total]);res.status(201).json({id:rows[0].id,subtotalVnd:subtotal,totalVnd:total})}));
 app.put('/api/quotes/settings',roles('admin'),asyncRoute(async(req,res)=>{const b=z.object({wholesaleDiscountPercent:z.number().min(0).max(100)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Chiết khấu sỉ phải từ 0% đến 100%.'});await pool.query('INSERT INTO quote_settings(id,wholesale_discount_percent,updated_by,updated_at) VALUES(1,$1,$2,now()) ON CONFLICT(id) DO UPDATE SET wholesale_discount_percent=EXCLUDED.wholesale_discount_percent,updated_by=EXCLUDED.updated_by,updated_at=now()',[b.data.wholesaleDiscountPercent,req.session.user!.id]);res.json({wholesaleDiscountPercent:b.data.wholesaleDiscountPercent})}));
 app.put('/api/inventory/weekly-counts',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
