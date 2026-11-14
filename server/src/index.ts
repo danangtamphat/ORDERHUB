@@ -161,10 +161,13 @@ app.get('/api/orders/daily-sales',roles('admin'),asyncRoute(async(_req,res)=>{
   )
   SELECT to_char(calendar.sale_date,'YYYY-MM-DD') AS date,
     COALESCE(daily.sales_vnd,0)::text AS "salesVnd",
-    COALESCE(daily.order_count,0)::int AS "orderCount"
+    COALESCE(daily.order_count,0)::int AS "orderCount",
+    (SELECT COALESCE(SUM(og.amount_vnd),0)::text FROM order_groups og
+      WHERE (og.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date >= date_trunc('month', now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+      AND (og.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date <= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date) AS "monthlySalesVnd"
   FROM calendar LEFT JOIN daily USING (sale_date)
   ORDER BY calendar.sale_date`);
-  res.json({days:rows});
+  res.json({days:rows,monthlySalesVnd:rows[0]?.monthlySalesVnd??'0'});
 }));
 app.get('/api/orders/monthly-status',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
   const user=req.session.user!;
