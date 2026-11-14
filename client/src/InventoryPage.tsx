@@ -7,7 +7,7 @@ type Item={id:string;sku:string;name:string;brand:string;unit:string;quantity:nu
 type WeeklyHistoryItem={itemId:string;sku:string;weekStart:string;quantity:number};
 const BRAND_SUGGESTIONS=['YOOSEE','390EYES','IMOU','OEM'];
 const money=(n:number)=>new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND',maximumFractionDigits:0}).format(n);
-const csvCell=(value:string|number)=>`"${String(value??'').replace(/"/g,'""')}"`;
+const csvCell=(value:string|number)=>{const text=String(value??'');return /[",\r\n]/.test(text)?`"${text.replace(/"/g,'""')}"`:text};
 const dateKey=(value:unknown)=>{const match=String(value??'').match(/\d{4}-\d{2}-\d{2}/);return match?.[0]??''};
 const shortDate=(date:string)=>{const key=dateKey(date);return key?formatDateVn(key):'—'};
 async function request<T>(path:string,init?:RequestInit):Promise<T>{const r=await fetch(`/api${path}`,{credentials:'include',headers:{'Content-Type':'application/json',...init?.headers},...init});if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||'Không thể lưu thay đổi kho.')}if(r.status===204)return undefined as T;return r.json()}
