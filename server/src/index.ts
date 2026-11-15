@@ -457,8 +457,9 @@ app.get('/api/sims',roles('admin','manager','staff'),asyncRoute(async(req,res)=>
   if(q){values.push(`%${q}%`);where.push(`(serial ILIKE $${values.length} OR COALESCE(order_code,'') ILIKE $${values.length})`)}
   if(carrier){values.push(carrier);where.push(`carrier=$${values.length}`)}
   if(status){values.push(status);where.push(`status=$${values.length}`)}else if(!q){where.push("status<>'sold'")}
+  const simOrder=status==='sold'?'sold_at DESC NULLS LAST,created_at DESC,serial':'created_at DESC,serial';
   const [list,summary]=await Promise.all([
-    pool.query(`SELECT id,carrier,serial,status,order_code AS "orderCode",note,to_char(sold_at AT TIME ZONE 'Asia/Ho_Chi_Minh','YYYY-MM-DD HH24:MI') AS "soldAt",created_at AS "createdAt" FROM sim_cards ${where.length?`WHERE ${where.join(' AND ')}`:''} ORDER BY created_at DESC,serial`,values),
+    pool.query(`SELECT id,carrier,serial,status,order_code AS "orderCode",note,to_char(sold_at AT TIME ZONE 'Asia/Ho_Chi_Minh','YYYY-MM-DD HH24:MI') AS "soldAt",created_at AS "createdAt" FROM sim_cards ${where.length?`WHERE ${where.join(' AND ')}`:''} ORDER BY ${simOrder}`,values),
     pool.query(`SELECT carrier,count(*) FILTER(WHERE status IN ('in_stock','returned'))::int AS remaining,count(*) FILTER(WHERE status='in_stock')::int AS in_stock,count(*) FILTER(WHERE status='returned')::int AS returned,count(*) FILTER(WHERE status='sold')::int AS sold FROM sim_cards GROUP BY carrier ORDER BY carrier`)
   ]);
   res.json({sims:list.rows,summary:summary.rows});
