@@ -152,10 +152,13 @@ CREATE TABLE IF NOT EXISTS payroll_adjustments (
   insurance_vnd bigint NOT NULL DEFAULT 0,
   advance_vnd bigint NOT NULL DEFAULT 0,
   holdback_vnd bigint NOT NULL DEFAULT 0,
+  holdback_override boolean NOT NULL DEFAULT false,
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(user_id,period_start)
 );
 ALTER TABLE payroll_adjustments ADD COLUMN IF NOT EXISTS work_shifts_override integer CHECK (work_shifts_override >= 0);
+ALTER TABLE payroll_adjustments ADD COLUMN IF NOT EXISTS holdback_override boolean NOT NULL DEFAULT false;
+UPDATE payroll_adjustments SET holdback_override=true WHERE holdback_vnd<>0 AND holdback_override=false;
 ALTER TABLE payroll_adjustments ALTER COLUMN completion_rate TYPE numeric(8,2);
 ALTER TABLE payroll_adjustments DROP CONSTRAINT IF EXISTS payroll_adjustments_completion_rate_check;
 ALTER TABLE payroll_adjustments ADD CONSTRAINT payroll_adjustments_completion_rate_check CHECK (completion_rate BETWEEN 0 AND 200000);
