@@ -355,5 +355,35 @@ html, body, body * { font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-seri
 .daily-sales-chart{width:100%;height:230px}
 @media(max-width:640px){.daily-sales-panel{padding:16px 12px}.daily-sales-panel .panel-head{align-items:flex-start;gap:10px}.daily-sales-total{font-size:16px}.daily-sales-chart{height:210px}}
 
+/* Multi-layer depth effects for a more tactile dashboard */
+.branded-shell .layout-container::before{animation:ambient-drift 22s ease-in-out infinite alternate}
+.branded-shell .header-quote strong{animation:quote-in .6s cubic-bezier(.2,.7,.2,1) both,quote-glow 6s ease-in-out 1s infinite alternate}
+.branded-shell .header-clock{transform:translateZ(0);transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s ease,background .35s ease}
+.branded-shell .header-clock:hover{transform:translateY(-2px) perspective(600px) rotateX(4deg);box-shadow:0 12px 28px #07162e2b,inset 0 1px #ffffff60}
+.branded-shell .header-stat-grid .stat-card{isolation:isolate;transition:transform .42s cubic-bezier(.2,.8,.2,1),box-shadow .42s ease,border-color .3s ease}
+.branded-shell .header-stat-grid .stat-card::after{position:absolute;inset:0;z-index:0;content:"";pointer-events:none;opacity:0;background:radial-gradient(ellipse at 18% 0%,color-mix(in srgb,var(--card-accent) 17%,transparent),transparent 58%),linear-gradient(135deg,#ffffff90,transparent 38%);transition:opacity .35s ease}
+.branded-shell .header-stat-grid .stat-card>*{position:relative;z-index:1}
+.branded-shell .header-stat-grid .stat-card:hover{transform:perspective(900px) rotateX(2deg) rotateY(-1.4deg) translate3d(0,-7px,8px);box-shadow:0 22px 42px color-mix(in srgb,var(--card-accent) 21%,transparent),0 5px 13px #15345318,inset 0 1px #fff}
+.branded-shell .header-stat-grid .stat-card:hover::after{opacity:1}
+.branded-shell .header-stat-grid .stat-icon{transition:transform .38s cubic-bezier(.2,.8,.2,1),box-shadow .38s ease}
+.branded-shell .header-stat-grid .stat-card:hover .stat-icon{transform:translateZ(18px) rotate(-5deg) scale(1.08);box-shadow:0 9px 20px #294d7925,inset 0 1px #fff}
+.branded-shell .header-stat-grid .stat-card:hover .stat-value{transform:translateZ(12px);text-shadow:0 3px 18px color-mix(in srgb,var(--card-accent) 34%,transparent)}
+.branded-shell .header-stat-grid .stat-value{transition:transform .35s cubic-bezier(.2,.8,.2,1),text-shadow .35s ease}
+.branded-shell .daily-sales-panel{position:relative;isolation:isolate;overflow:hidden;transform:translateZ(0);transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s ease,border-color .35s ease}
+.branded-shell .daily-sales-panel::before{position:absolute;inset:0;z-index:-1;content:"";pointer-events:none;background:radial-gradient(ellipse at 2% 0%,#8ab6ff18,transparent 40%),radial-gradient(ellipse at 98% 100%,#28b98c10,transparent 43%)}
+.branded-shell .daily-sales-panel:hover{transform:translateY(-3px);border-color:#c8d9f0;box-shadow:0 18px 38px #1d47731a,inset 0 1px #fff}
+.branded-shell .daily-sales-total{text-shadow:0 2px 16px #0a9c7026;transition:transform .3s ease,text-shadow .3s ease}
+.branded-shell .daily-sales-panel:hover .daily-sales-total{transform:translateY(-1px);text-shadow:0 3px 20px #0a9c7040}
+.branded-shell .daily-sales-chart .recharts-bar-rectangle{transform-box:fill-box;transform-origin:center bottom;transition:filter .28s ease,transform .28s cubic-bezier(.2,.8,.2,1)}
+.branded-shell .daily-sales-chart .recharts-bar-rectangle:hover{filter:drop-shadow(0 7px 8px #0b9f7544);transform:translateY(-3px)}
+.branded-shell .horizontal-nav{padding:5px 7px 0;border-radius:14px 14px 0 0;background:linear-gradient(180deg,#ffffff85,#ffffff30);box-shadow:0 8px 22px #3157820b,inset 0 1px #ffffffcc;backdrop-filter:blur(9px)}
+.branded-shell .horizontal-nav-item.active{box-shadow:0 5px 17px #4262d51a,inset 0 1px #ffffffb5}
+.branded-shell .orders-panel tbody tr:hover td:first-child{border-radius:7px 0 0 7px}
+.branded-shell .orders-panel tbody tr:hover td:last-child{border-radius:0 7px 7px 0}
+@keyframes ambient-drift{0%{transform:translate3d(-1.5%,0,0) scale(1)}100%{transform:translate3d(2%,2%,0) scale(1.06)}}
+@keyframes quote-glow{0%{text-shadow:0 0 12px #82c7ff50,0 3px 22px #08172c55}100%{text-shadow:0 0 21px #82c7ff9c,0 3px 26px #08172c55}}
+@media(max-width:760px){.branded-shell .horizontal-nav{backdrop-filter:none}.branded-shell .header-stat-grid .stat-card:hover{transform:translateY(-3px)}}
+@media(prefers-reduced-motion:reduce){.branded-shell .layout-container::before,.branded-shell .header-quote strong{animation:none!important}.branded-shell .header-clock:hover,.branded-shell .header-stat-grid .stat-card:hover,.branded-shell .daily-sales-panel:hover,.branded-shell .daily-sales-chart .recharts-bar-rectangle:hover{transform:none!important}.branded-shell .header-stat-grid .stat-card::after{display:none}}
+
 .inventory-needs-toggle{justify-self:start;margin-top:3px;padding:4px 0;border:0;background:transparent;color:#315eea;font:inherit;font-size:11px;font-weight:750;cursor:pointer}.saved-quote-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.saved-quote-delete{color:#c83745!important}
 .bulk-skip-note{margin:8px 0;padding:10px 12px;border:1px solid #f4d08d;border-radius:8px;background:#fff8e8;color:#8a5600}.bulk-skipped-list{margin:0 0 12px;color:#586b86;font-size:12px}.bulk-skipped-list summary{cursor:pointer;font-weight:700}.bulk-skipped-list>div{display:grid;gap:5px;max-height:120px;overflow:auto;margin-top:7px;padding:9px 12px;border-radius:7px;background:#f7f9fc}
