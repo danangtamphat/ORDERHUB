@@ -387,3 +387,23 @@ html, body, body * { font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-seri
 
 .inventory-needs-toggle{justify-self:start;margin-top:3px;padding:4px 0;border:0;background:transparent;color:#315eea;font:inherit;font-size:11px;font-weight:750;cursor:pointer}.saved-quote-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.saved-quote-delete{color:#c83745!important}
 .bulk-skip-note{margin:8px 0;padding:10px 12px;border:1px solid #f4d08d;border-radius:8px;background:#fff8e8;color:#8a5600}.bulk-skipped-list{margin:0 0 12px;color:#586b86;font-size:12px}.bulk-skipped-list summary{cursor:pointer;font-weight:700}.bulk-skipped-list>div{display:grid;gap:5px;max-height:120px;overflow:auto;margin-top:7px;padding:9px 12px;border-radius:7px;background:#f7f9fc}
+
+.task-drafts{display:grid;gap:10px}
+.task-drafts-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.task-drafts-head strong,.task-drafts-head small{display:block}
+.task-drafts-head small{margin-top:3px;color:#8291a8;font-size:12px;font-weight:400}
+.task-draft-row{display:grid;grid-template-columns:34px minmax(0,1fr) minmax(0,1.2fr) 38px;align-items:center;gap:10px;padding:12px;border:1px solid #dbe5f3;border-radius:10px;background:#f8fbff}
+.task-draft-number{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#e9efff;color:#3459d7;font-weight:800}
+.task-draft-row label{display:grid;gap:6px;font-size:12px;font-weight:600;color:#59677b}
+.task-draft-row input,.task-draft-row textarea,.task-edit-modal textarea{width:100%;border:1px solid #cdd7e5;border-radius:8px;background:#fff;padding:10px 11px;color:#20304a;font-size:13px}
+.task-draft-row textarea,.task-edit-modal textarea{resize:vertical}
+.task-draft-remove{display:grid;place-items:center;width:36px;height:36px;border:1px solid #f2c4c6;border-radius:8px;background:#fff5f5;color:#d8454d}
+.task-draft-remove:disabled{opacity:.38;cursor:not-allowed}
+.task-edit-modal{display:grid;gap:14px}
+.task-edit-modal .modal-head{margin-bottom:4px}
+.task-edit-modal form{display:grid;gap:14px}
+.task-edit-modal form label{display:grid;gap:6px}
+.task-edit-modal form input{height:40px}
+.task-edit-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:4px}
+.task-action-edit{display:inline-flex;align-items:center;gap:4px}
+@media(max-width:680px){.task-draft-row{grid-template-columns:30px minmax(0,1fr) 36px}.task-draft-row label:nth-of-type(2){grid-column:2/4}.task-drafts-head{align-items:flex-start;flex-direction:column}}
