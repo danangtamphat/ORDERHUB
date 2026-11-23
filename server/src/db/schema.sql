@@ -79,9 +79,11 @@ CREATE TABLE IF NOT EXISTS task_assignment_notifications (
   task_id uuid NOT NULL REFERENCES assigned_tasks(id) ON DELETE CASCADE,
   task_title text NOT NULL,
   deadline date NOT NULL,
+  event_type text NOT NULL DEFAULT 'assigned',
   created_at timestamptz NOT NULL DEFAULT now(),
   read_at timestamptz
 );
+ALTER TABLE task_assignment_notifications ADD COLUMN IF NOT EXISTS event_type text NOT NULL DEFAULT 'assigned';
 CREATE INDEX IF NOT EXISTS task_assignment_notifications_unread_idx ON task_assignment_notifications(user_id, created_at DESC) WHERE read_at IS NULL;
 CREATE TABLE IF NOT EXISTS work_schedules (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -101,6 +103,19 @@ CREATE TABLE IF NOT EXISTS attendance (
   checked_in_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(user_id,work_date)
 );
+CREATE TABLE IF NOT EXISTS public_holidays (
+  work_date date PRIMARY KEY,
+  name text NOT NULL DEFAULT 'Ngày lễ Việt Nam',
+  created_by uuid REFERENCES users(id),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS holiday_pay_settings (
+  id smallint PRIMARY KEY DEFAULT 1 CHECK (id=1),
+  extra_pay_per_shift_vnd bigint NOT NULL DEFAULT 0 CHECK (extra_pay_per_shift_vnd>=0),
+  updated_by uuid REFERENCES users(id),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO holiday_pay_settings(id) VALUES(1) ON CONFLICT(id) DO NOTHING;
 CREATE TABLE IF NOT EXISTS daily_login_notices (
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   login_date date NOT NULL,
