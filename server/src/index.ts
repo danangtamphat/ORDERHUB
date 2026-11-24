@@ -50,7 +50,7 @@ app.post('/api/web-orders',asyncRoute(async(req,res)=>{
   res.status(rows.length?201:200).json({ok:true,duplicate:!rows.length});
 }));
 app.get('/api/web-orders',roles('admin','manager','staff'),asyncRoute(async(_req,res)=>{
-  res.set('Cache-Control','no-store');
+  delete _req.headers['if-none-match'];delete _req.headers['if-modified-since'];res.set('Cache-Control','no-store, max-age=0');
   const {rows}=await pool.query(`SELECT id,source_order_id AS "sourceOrderId",customer_name AS "customerName",customer_phone AS "customerPhone",shipping_address AS "shippingAddress",items,total_vnd AS "totalVnd",status,created_at AS "createdAt" FROM camera_web_orders ORDER BY CASE status WHEN 'new' THEN 0 WHEN 'contacted' THEN 1 ELSE 2 END,created_at DESC LIMIT 500`);res.json({orders:rows});
 }));
 app.patch('/api/web-orders/:id/status',roles('admin','staff'),asyncRoute(async(req,res)=>{
