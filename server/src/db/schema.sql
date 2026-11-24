@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS camera_web_orders (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE camera_web_orders ADD COLUMN IF NOT EXISTS tracking_code text;
+CREATE UNIQUE INDEX IF NOT EXISTS camera_web_orders_tracking_code_unique ON camera_web_orders(tracking_code) WHERE tracking_code IS NOT NULL;
 CREATE INDEX IF NOT EXISTS camera_web_orders_created_idx ON camera_web_orders(created_at DESC);
 CREATE TABLE IF NOT EXISTS employee_order_notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -65,6 +67,7 @@ CREATE TABLE IF NOT EXISTS employee_order_notifications (
   read_at timestamptz,
   UNIQUE(user_id,source_type,source_id)
 );
+DELETE FROM employee_order_notifications WHERE source_type='website';
 CREATE INDEX IF NOT EXISTS employee_order_notifications_unread_idx ON employee_order_notifications(user_id,created_at DESC) WHERE read_at IS NULL;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at timestamptz;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_reconciled boolean NOT NULL DEFAULT false;
