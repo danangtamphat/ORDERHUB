@@ -1,0 +1,19 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Check, Phone, RefreshCw } from 'lucide-react';
+
+type WebOrder={id:string;sourceOrderId:string;customerName:string;customerPhone:string;shippingAddress:string;items:{id:number;name:string;price:number;qty:number}[];totalVnd:number|string;status:'new'|'contacted'|'confirmed'|'cancelled';createdAt:string};
+const money=(n:number)=>new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND',maximumFractionDigits:0}).format(n);
+const statusLabel:Record<WebOrder['status'],string>={new:'Chờ gọi xác nhận',contacted:'Đã gọi khách',confirmed:'Đã chốt đơn',cancelled:'Đã hủy'};
+async function api<T>(path:string,init?:RequestInit):Promise<T>{const res=await fetch(`/api${path}`,{credentials:'include',headers:{'Content-Type':'application/json',...init?.headers},...init});if(!res.ok){const data=await res.json().catch(()=>({}));throw new Error(data.error||'Không thể tải yêu cầu đặt hàng.')}return res.json()}
+export default function WebOrdersPage({onError,onNotice}:{onError:(s:string)=>void;onNotice:(s:string)=>void}){
+ const [orders,setOrders]=useState<WebOrder[]>([]),[busy,setBusy]=useState(false);
+ const refresh=useCallback(async()=>{setBusy(true);try{const data=await api<{orders:WebOrder[]}>('/web-orders');setOrders(data.orders)}catch(e){onError((e as Error).message)}finally{setBusy(false)}},[onError]);
+ useEffect(()=>{void refresh();const timer=window.setInterval(()=>void refresh(),30000);return()=>window.clearInterval(timer)},[refresh]);
+ const update=async(order:WebOrder,status:WebOrder['status'])=>{try{await api(`/web-orders/${order.id}/status`,{method:'PATCH',body:JSON.stringify({status})});await refresh();onNotice(`Đã cập nhật yêu cầu của ${order.customerName}.`)}catch(e){onError((e as Error).message)}};
+ const pending=orders.filter(o=>o.status==='new').length;
+ return <section className="panel web-orders-panel"><div className="panel-head"><div><h2>Yêu cầu đặt hàng từ website</h2><p>Khách đã gửi thông tin liên hệ và địa chỉ nhận camera. Gọi khách để xác nhận giá, hàng và giao hàng.</p></div><button className="btn-secondary" onClick={()=>void refresh()} disabled={busy}><RefreshCw size={15}/> Làm mới</button></div>
+  <div className="web-order-summary"><strong>{pending}</strong><span>đang chờ gọi</span><small>· {orders.length} yêu cầu gần nhất</small></div>
+  {!orders.length?<div className="web-orders-empty">{busy?'Đang tải yêu cầu…':'Chưa có yêu cầu đặt hàng từ website.'}</div>:<div className="web-orders-list">{orders.map(order=><article className="web-order-card" key={order.id}><header><div><span className={`web-order-status ${order.status}`}>{statusLabel[order.status]}</span><time>{new Date(order.createdAt).toLocaleString('vi-VN')}</time></div><strong>{money(Number(order.totalVnd))}</strong></header><div className="web-order-customer"><b>{order.customerName}</b><a className="web-order-phone" href={`tel:${order.customerPhone}`}><Phone size={15}/>{order.customerPhone}</a></div><p className="web-order-address"><b>Địa chỉ giao hàng:</b> {order.shippingAddress}</p><ul>{order.items.map((item,i)=><li key={`${item.id}-${i}`}><span>{item.name} × {item.qty}</span><b>{money(item.price*item.qty)}</b></li>)}</ul><footer>{order.status==='new'&&<button className="btn-primary" onClick={()=>void update(order,'contacted')}><Phone size={15}/> Đã gọi khách</button>}{order.status==='contacted'&&<><button className="btn-primary" onClick={()=>void update(order,'confirmed')}><Check size={15}/> Đã chốt đơn</button><button className="btn-secondary" onClick={()=>void update(order,'cancelled')}>Hủy yêu cầu</button></>}{(order.status==='confirmed'||order.status==='cancelled')&&<button className="btn-secondary" onClick={()=>void update(order,'contacted')}>Mở lại xử lý</button>}</footer></article>)}</div>}
+ </section>
+}
+

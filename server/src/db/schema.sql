@@ -41,6 +41,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS orders_owner_tracking_code_idx
   ON orders(owner_user_id, lower(tracking_code));
 CREATE INDEX IF NOT EXISTS orders_created_at_idx ON orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS orders_owner_idx ON orders(owner_user_id);
+CREATE TABLE IF NOT EXISTS camera_web_orders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_order_id text NOT NULL UNIQUE,
+  customer_name text NOT NULL,
+  customer_phone text NOT NULL,
+  shipping_address text NOT NULL,
+  items jsonb NOT NULL,
+  total_vnd bigint NOT NULL CHECK (total_vnd >= 0),
+  status text NOT NULL DEFAULT 'new' CHECK (status IN ('new','contacted','confirmed','cancelled')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS camera_web_orders_created_idx ON camera_web_orders(created_at DESC);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at timestamptz;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_reconciled boolean NOT NULL DEFAULT false;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS reconciled_by uuid REFERENCES users(id);

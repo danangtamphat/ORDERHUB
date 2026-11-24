@@ -40,6 +40,22 @@ const orderSchema = z.object({
   shareUserIds: z.array(z.string().uuid()).max(50).optional()
 });
 app.get('/api/health', (_req,res)=>res.json({ ok:true }));
+const webOrderSchema=z.object({sourceOrderId:z.string().uuid(),customer:z.object({name:z.string().trim().min(1).max(100),phone:z.string().regex(/^0\\d{9}$/),address:z.string().trim().min(8).max(500)}),items:z.array(z.object({id:z.number().int().positive(),name:z.string().trim().min(1).max(180),price:z.number().int().nonnegative().max(1000000000),qty:z.number().int().min(1).max(20)})).min(1).max(30),totalVnd:z.number().int().nonnegative().max(1000000000)});
+app.post('/api/web-orders',asyncRoute(async(req,res)=>{
+  const expected=process.env.CAMERA_WEB_ORDER_TOKEN||'',supplied=req.get('authorization')||'',expectedHeader='Bearer '+expected;
+  if(!expected||Buffer.byteLength(supplied)!==Buffer.byteLength(expectedHeader)||!timingSafeEqual(Buffer.from(supplied),Buffer.from(expectedHeader)))return res.status(401).json({error:'Không có quyền gửi yêu cầu.'});
+  const parsed=webOrderSchema.safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Thông tin yêu cầu đặt hàng không hợp lệ.'});
+  const d=parsed.data,computed=d.items.reduce((sum,item)=>sum+item.price*item.qty,0);if(computed!==d.totalVnd)return res.status(400).json({error:'Tổng tiền đơn hàng không khớp.'});
+  const {rows}=await pool.query(`INSERT INTO camera_web_orders(source_order_id,customer_name,customer_phone,shipping_address,items,total_vnd) VALUES($1,$2,$3,$4,$5::jsonb,$6) ON CONFLICT(source_order_id) DO NOTHING RETURNING id`,[d.sourceOrderId,d.customer.name,d.customer.phone,d.customer.address,JSON.stringify(d.items),d.totalVnd]);
+  res.status(rows.length?201:200).json({ok:true,duplicate:!rows.length});
+}));
+app.get('/api/web-orders',roles('admin','manager','staff'),asyncRoute(async(_req,res)=>{
+  const {rows}=await pool.query(`SELECT id,source_order_id AS "sourceOrderId",customer_name AS "customerName",customer_phone AS "customerPhone",shipping_address AS "shippingAddress",items,total_vnd AS "totalVnd",status,created_at AS "createdAt" FROM camera_web_orders ORDER BY CASE status WHEN 'new' THEN 0 WHEN 'contacted' THEN 1 ELSE 2 END,created_at DESC LIMIT 500`);res.json({orders:rows});
+}));
+app.patch('/api/web-orders/:id/status',roles('admin','staff'),asyncRoute(async(req,res)=>{
+  const body=z.object({status:z.enum(['new','contacted','confirmed','cancelled'])}).safeParse(req.body);if(!body.success)return res.status(400).json({error:'Trạng thái không hợp lệ.'});
+  const {rows}=await pool.query('UPDATE camera_web_orders SET status=$1,updated_at=now() WHERE id=$2 RETURNING id',[body.data.status,req.params.id]);if(!rows.length)return res.status(404).json({error:'Không tìm thấy yêu cầu đặt hàng.'});res.json({ok:true});
+}));
 app.get('/api/auth/me', (req,res)=>res.json({ user: req.session.user || null }));
 app.post('/api/auth/login', asyncRoute(async(req,res)=>{
   const body=z.object({username:z.string().min(1),password:z.string().min(1)}).safeParse(req.body);
