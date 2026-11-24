@@ -40,7 +40,7 @@ const orderSchema = z.object({
   shareUserIds: z.array(z.string().uuid()).max(50).optional()
 });
 app.get('/api/health', (_req,res)=>res.json({ ok:true }));
-const webOrderSchema=z.object({sourceOrderId:z.string().uuid(),customer:z.object({name:z.string().trim().min(1).max(100),phone:z.string().regex(/^0\\d{9}$/),address:z.string().trim().min(8).max(500)}),items:z.array(z.object({id:z.number().int().positive(),name:z.string().trim().min(1).max(180),price:z.number().int().nonnegative().max(1000000000),qty:z.number().int().min(1).max(20)})).min(1).max(30),totalVnd:z.number().int().nonnegative().max(1000000000)});
+const webOrderSchema=z.object({sourceOrderId:z.string().uuid(),customer:z.object({name:z.string().trim().min(1).max(100),phone:z.string().regex(/^0\d{9}$/),address:z.string().trim().min(8).max(500)}),items:z.array(z.object({id:z.number().int().positive(),name:z.string().trim().min(1).max(180),price:z.number().int().nonnegative().max(1000000000),qty:z.number().int().min(1).max(20)})).min(1).max(30),totalVnd:z.number().int().nonnegative().max(1000000000)});
 app.post('/api/web-orders',asyncRoute(async(req,res)=>{
   const expected=process.env.CAMERA_WEB_ORDER_TOKEN||'',supplied=req.get('authorization')||'',expectedHeader='Bearer '+expected;
   if(!expected||Buffer.byteLength(supplied)!==Buffer.byteLength(expectedHeader)||!timingSafeEqual(Buffer.from(supplied),Buffer.from(expectedHeader)))return res.status(401).json({error:'Không có quyền gửi yêu cầu.'});
