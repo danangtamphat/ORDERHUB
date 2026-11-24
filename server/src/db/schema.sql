@@ -54,6 +54,18 @@ CREATE TABLE IF NOT EXISTS camera_web_orders (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS camera_web_orders_created_idx ON camera_web_orders(created_at DESC);
+CREATE TABLE IF NOT EXISTS employee_order_notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source_type text NOT NULL CHECK (source_type IN ('order','website')),
+  source_id text NOT NULL,
+  title text NOT NULL,
+  description text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  read_at timestamptz,
+  UNIQUE(user_id,source_type,source_id)
+);
+CREATE INDEX IF NOT EXISTS employee_order_notifications_unread_idx ON employee_order_notifications(user_id,created_at DESC) WHERE read_at IS NULL;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at timestamptz;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_reconciled boolean NOT NULL DEFAULT false;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS reconciled_by uuid REFERENCES users(id);
