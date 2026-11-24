@@ -4,7 +4,7 @@ import { Check, Phone, RefreshCw } from 'lucide-react';
 type WebOrder={id:string;sourceOrderId:string;customerName:string;customerPhone:string;shippingAddress:string;items:{id:number;name:string;price:number;qty:number}[];totalVnd:number|string;status:'new'|'contacted'|'confirmed'|'cancelled';createdAt:string};
 const money=(n:number)=>new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND',maximumFractionDigits:0}).format(n);
 const statusLabel:Record<WebOrder['status'],string>={new:'Chờ gọi xác nhận',contacted:'Đã gọi khách',confirmed:'Đã chốt đơn',cancelled:'Đã hủy'};
-async function api<T>(path:string,init?:RequestInit):Promise<T>{const res=await fetch(`/api${path}`,{credentials:'include',headers:{'Content-Type':'application/json',...init?.headers},...init});if(!res.ok){const data=await res.json().catch(()=>({}));throw new Error(data.error||'Không thể tải yêu cầu đặt hàng.')}return res.json()}
+async function api<T>(path:string,init?:RequestInit):Promise<T>{const res=await fetch(`/api${path}`,{cache:'no-store',credentials:'include',headers:{'Content-Type':'application/json',...init?.headers},...init});if(!res.ok){const data=await res.json().catch(()=>({}));throw new Error(data.error||'Không thể tải yêu cầu đặt hàng.')}return res.json()}
 export default function WebOrdersPage({onError,onNotice}:{onError:(s:string)=>void;onNotice:(s:string)=>void}){
  const [orders,setOrders]=useState<WebOrder[]>([]),[busy,setBusy]=useState(false);
  const refresh=useCallback(async()=>{setBusy(true);try{const data=await api<{orders:WebOrder[]}>('/web-orders');setOrders(data.orders)}catch(e){onError((e as Error).message)}finally{setBusy(false)}},[onError]);
