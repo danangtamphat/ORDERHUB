@@ -31,6 +31,7 @@ const roles = (...allowed: string[]) => (req: Request,res: Response,next: NextFu
   if (!allowed.includes(req.session.user.role)) return res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này.' });
   next();
 };
+app.use(async(req,res,next)=>{const user=req.session.user;if(!user||req.path==='/api/auth/login')return next();try{const {rows}=await pool.query('SELECT active FROM users WHERE id=$1',[user.id]);if(rows[0]?.active)return next();req.session.destroy(()=>{});res.clearCookie('orderhub.sid');return res.status(401).json({error:'Tài khoản đã bị vô hiệu hóa.'})}catch(e){next(e)}});
 const orderSchema = z.object({
   trackingCode: z.string().trim().min(5).max(30).regex(/^[a-zA-Z0-9-]+$/),
   amountVnd: z.number().int().min(10000).max(50000000),
@@ -101,11 +102,24 @@ app.post('/api/auth/password',asyncRoute(async(req,res)=>{
   await pool.query('UPDATE users SET password_hash=$1,must_change_password=false WHERE id=$2',[await bcrypt.hash(body.data.newPassword,12),req.session.user.id]);
   req.session.user.mustChangePassword=false; res.json({ok:true});
 }));
+app.get('/api/users/me/final-salary',asyncRoute(async(req,res)=>{
+  if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});
+  const {rows}=await pool.query("SELECT resignation_pending AS \"pending\",resignation_period_start AS \"periodStart\",resignation_period_end AS \"periodEnd\",resignation_final_salary_vnd AS \"amountVnd\",resignation_salary_confirmed_at AS \"confirmedAt\" FROM users WHERE id=$1",[req.session.user.id]);
+  res.json({finalSalary:rows[0]?.pending?rows[0]:null});
+}));
+app.post('/api/users/me/final-salary/acknowledge',asyncRoute(async(req,res)=>{
+  if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});
+  if(!['staff','manager'].includes(req.session.user.role))return res.status(403).json({error:'Chỉ nhân viên đang nghỉ việc mới xác nhận kỳ lương cuối.'});
+  const {rows}=await pool.query("UPDATE users SET active=false,resignation_pending=false,resignation_salary_confirmed_at=now() WHERE id=$1 AND active=true AND resignation_pending=true AND resignation_final_salary_vnd IS NOT NULL RETURNING id",[req.session.user.id]);
+  if(!rows.length)return res.status(409).json({error:'Không có kỳ lương cuối đang chờ xác nhận.'});
+  await new Promise<void>((resolve,reject)=>req.session.destroy(error=>error?reject(error):resolve()));
+  res.clearCookie('orderhub.sid');res.json({ok:true});
+}));
 app.get('/api/users',roles('admin','manager'),asyncRoute(async(_req,res)=>{
-  const {rows}=await pool.query("SELECT u.id,u.username,u.display_name AS \"displayName\",u.role,u.active,u.recovery_email AS \"recoveryEmail\",u.employee_grade AS \"employeeGrade\",u.hourly_rate_override_vnd AS \"hourlyRateOverrideVnd\",u.created_at AS \"createdAt\",COALESCE(p.pet_type,'cat') AS \"petType\" FROM users u LEFT JOIN pet_settings p ON p.user_id=u.id ORDER BY u.display_name");res.json({users:rows});
+  const {rows}=await pool.query("SELECT u.id,u.username,u.display_name AS \"displayName\",u.role,u.active,u.recovery_email AS \"recoveryEmail\",u.employee_grade AS \"employeeGrade\",u.hourly_rate_override_vnd AS \"hourlyRateOverrideVnd\",u.resignation_pending AS \"resignationPending\",u.resignation_period_start AS \"resignationPeriodStart\",u.resignation_period_end AS \"resignationPeriodEnd\",u.resignation_final_salary_vnd AS \"resignationFinalSalaryVnd\",u.resignation_salary_confirmed_at AS \"resignationSalaryConfirmedAt\",u.created_at AS \"createdAt\",COALESCE(p.pet_type,'cat') AS \"petType\" FROM users u LEFT JOIN pet_settings p ON p.user_id=u.id ORDER BY u.display_name");res.json({users:rows});
 }));
 app.get('/api/users/share-recipients',roles('staff'),asyncRoute(async(_req,res)=>{
-  const {rows}=await pool.query("SELECT u.id,u.username,u.display_name AS \"displayName\",u.role,u.active,COALESCE(p.pet_type,'cat') AS \"petType\" FROM users u LEFT JOIN pet_settings p ON p.user_id=u.id WHERE u.active=true AND u.role='staff' ORDER BY u.display_name");res.json({users:rows});
+  const {rows}=await pool.query("SELECT u.id,u.username,u.display_name AS \"displayName\",u.role,u.active,COALESCE(p.pet_type,'cat') AS \"petType\" FROM users u LEFT JOIN pet_settings p ON p.user_id=u.id WHERE u.active=true AND u.resignation_pending=false AND u.role='staff' ORDER BY u.display_name");res.json({users:rows});
 }));
 app.post('/api/users',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({username:z.string().trim().min(3).max(40),displayName:z.string().trim().min(1).max(100),password:z.string().min(8).max(128),role:z.enum(['manager','staff']),employeeGrade:z.number().int().min(1).max(3).default(2)}).safeParse(req.body);
@@ -113,15 +127,32 @@ app.post('/api/users',roles('admin'),asyncRoute(async(req,res)=>{
   const {username,displayName,password,role,employeeGrade}=b.data;
   const result=await pool.query(`INSERT INTO users(username,display_name,password_hash,role,must_change_password,employee_grade) VALUES($1,$2,$3,$4,true,$5) RETURNING id,username,display_name AS "displayName",role,active,recovery_email AS "recoveryEmail",employee_grade AS "employeeGrade"`,[username,displayName,await bcrypt.hash(password,12),role,role==='staff'?employeeGrade:2]);res.status(201).json({user:result.rows[0]});
 }));
+app.post('/api/users/:id/resignation',roles('admin'),asyncRoute(async(req,res)=>{
+  const b=z.object({periodStart:z.string().regex(/^\d{4}-\d{2}-01$/),periodEnd:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),finalSalaryVnd:z.number().int().min(-1000000000).max(1000000000)}).safeParse(req.body);
+  if(!b.success)return res.status(400).json({error:'Kỳ lương cuối hoặc số tiền thực nhận không hợp lệ.'});
+  if(b.data.periodEnd<b.data.periodStart)return res.status(400).json({error:'Ngày kết thúc kỳ lương không hợp lệ.'});
+  const client=await pool.connect();try{await client.query('BEGIN');
+    const target=(await client.query("SELECT id,display_name AS \"displayName\",role,active,resignation_pending AS \"resignationPending\" FROM users WHERE id=$1 FOR UPDATE",[req.params.id])).rows[0];
+    if(!target||!target.active||!['staff','manager'].includes(target.role)){await client.query('ROLLBACK');return res.status(404).json({error:'Không tìm thấy tài khoản nhân viên đang hoạt động.'});}
+    if(target.resignationPending){await client.query('ROLLBACK');return res.status(409).json({error:'Quy trình nghỉ việc của nhân viên này đã bắt đầu.'});}
+    await client.query("UPDATE users SET resignation_pending=true,resignation_period_start=$1::date,resignation_period_end=$2::date,resignation_final_salary_vnd=$3,resignation_started_at=now(),resignation_salary_confirmed_at=NULL WHERE id=$4",[b.data.periodStart,b.data.periodEnd,b.data.finalSalaryVnd,target.id]);
+    const removed=await client.query("DELETE FROM work_schedules s WHERE s.user_id=$1 AND NOT EXISTS(SELECT 1 FROM attendance a WHERE a.user_id=s.user_id AND a.work_date=s.work_date) RETURNING s.id",[target.id]);
+    await client.query('COMMIT');res.json({ok:true,removedSchedules:removed.rowCount||0,displayName:target.displayName});
+  }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
+}));
+app.delete('/api/users/:id/resignation',roles('admin'),asyncRoute(async(req,res)=>{
+  const {rows}=await pool.query("UPDATE users SET resignation_pending=false,resignation_period_start=NULL,resignation_period_end=NULL,resignation_final_salary_vnd=NULL,resignation_started_at=NULL WHERE id=$1 AND active=true AND resignation_pending=true RETURNING id",[req.params.id]);
+  if(!rows.length)return res.status(404).json({error:'Không tìm thấy quy trình nghỉ việc đang chờ.'});res.json({ok:true});
+}));
 app.patch('/api/users/:id/role',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({role:z.enum(['manager','staff']),adminPassword:z.string().min(1),keepCurrentGradeSalary:z.boolean().default(false)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Thông tin không hợp lệ.'});
   const admin=(await pool.query('SELECT password_hash FROM users WHERE id=$1',[req.session.user!.id])).rows[0];if(!await bcrypt.compare(b.data.adminPassword,admin.password_hash))return res.status(403).json({error:'Mật khẩu xác nhận không đúng.'});
   if(req.params.id===req.session.user!.id)return res.status(400).json({error:'Không thể thay đổi vai trò tài khoản đang sử dụng.'});
-  const {rows}=await pool.query("UPDATE users SET hourly_rate_override_vnd=CASE WHEN $1='manager' AND $3 THEN CASE employee_grade WHEN 1 THEN 20000 WHEN 2 THEN 25000 WHEN 3 THEN 30000 END WHEN $1='manager' THEN hourly_rate_override_vnd ELSE NULL END,role=$1 WHERE id=$2 AND role<>'admin' RETURNING id,username,role,employee_grade AS \"employeeGrade\",hourly_rate_override_vnd AS \"hourlyRateOverrideVnd\"",[b.data.role,req.params.id,b.data.keepCurrentGradeSalary]);if(!rows[0])return res.status(404).json({error:'Không tìm thấy tài khoản.'});res.json({user:rows[0]});
+  const {rows}=await pool.query("UPDATE users SET hourly_rate_override_vnd=CASE WHEN $1='manager' AND $3 THEN CASE employee_grade WHEN 1 THEN 20000 WHEN 2 THEN 25000 WHEN 3 THEN 30000 END WHEN $1='manager' THEN hourly_rate_override_vnd ELSE NULL END,role=$1 WHERE id=$2 AND role<>'admin' AND resignation_pending=false RETURNING id,username,role,employee_grade AS \"employeeGrade\",hourly_rate_override_vnd AS \"hourlyRateOverrideVnd\"",[b.data.role,req.params.id,b.data.keepCurrentGradeSalary]);if(!rows[0])return res.status(404).json({error:'Không tìm thấy tài khoản.'});res.json({user:rows[0]});
 }));
 app.patch('/api/users/:id/settings',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({employeeGrade:z.number().int().min(1).max(3)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Bậc nhân viên không hợp lệ.'});
-  const {rows}=await pool.query(`UPDATE users SET employee_grade=CASE WHEN role='staff' THEN $1 ELSE employee_grade END WHERE id=$2 AND (role<>'admin' OR id=$3) RETURNING id,username,employee_grade AS "employeeGrade",recovery_email AS "recoveryEmail"`,[b.data.employeeGrade,req.params.id,req.session.user!.id]);if(!rows[0])return res.status(404).json({error:'Không tìm thấy tài khoản.'});res.json({user:rows[0]});
+  const {rows}=await pool.query(`UPDATE users SET employee_grade=CASE WHEN role='staff' THEN $1 ELSE employee_grade END WHERE id=$2 AND resignation_pending=false AND (role<>'admin' OR id=$3) RETURNING id,username,employee_grade AS "employeeGrade",recovery_email AS "recoveryEmail"`,[b.data.employeeGrade,req.params.id,req.session.user!.id]);if(!rows[0])return res.status(404).json({error:'Không tìm thấy tài khoản.'});res.json({user:rows[0]});
 }));
 app.post('/api/users/:id/reset-password',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({adminPassword:z.string().min(1)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Nhập mật khẩu Admin để xác nhận.'});
@@ -233,11 +264,12 @@ app.post('/api/orders',asyncRoute(async(req,res)=>{
   if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});
   const p=orderSchema.safeParse(req.body);if(!p.success)return res.status(400).json({error:'Đơn chưa hợp lệ. Mã 5–30 ký tự; giá trị 10.000–50.000.000 VNĐ.',details:p.error.flatten()});
   const actor=req.session.user;const {trackingCode,amountVnd,status,invoiceStatus}=p.data;
+  if(actor.role!=='admin'){const eligibility=await pool.query('SELECT active,resignation_pending AS pending FROM users WHERE id=$1',[actor.id]);if(!eligibility.rows[0]?.active)return res.status(403).json({error:'Tài khoản không còn hoạt động.'});if(eligibility.rows[0].pending)return res.status(403).json({error:'Tài khoản đang trong quy trình nghỉ việc; không thể tạo đơn hàng mới.'});}
   const client=await pool.connect();try{await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended(lower($1),0))',[trackingCode]);const duplicate=await client.query('SELECT 1 FROM orders WHERE lower(tracking_code)=lower($1) LIMIT 1',[trackingCode]);if(duplicate.rowCount)throw Object.assign(new Error('Mã vận đơn này đã tồn tại trong hệ thống. Mỗi mã chỉ được dùng cho một đơn.'),{status:409});
-    let owner=actor.id;if(actor.role==='admin'||actor.role==='manager'){owner=p.data.ownerUserId||actor.id;const check=await client.query('SELECT role FROM users WHERE id=$1 AND active=true',[owner]);if(!check.rows[0])throw Object.assign(new Error('Không tìm thấy nhân viên.'),{status:400});}
+    let owner=actor.id;if(actor.role==='admin'||actor.role==='manager'){owner=p.data.ownerUserId||actor.id;const check=await client.query('SELECT role,resignation_pending AS pending FROM users WHERE id=$1 AND active=true',[owner]);if(!check.rows[0])throw Object.assign(new Error('Không tìm thấy nhân viên.'),{status:400});if(check.rows[0].pending)throw Object.assign(new Error('Nhân viên đang trong quy trình nghỉ việc; không thể tạo đơn mới cho tài khoản này.'),{status:403});}
     const recipients=[...new Set((p.data.shareUserIds||[]).filter(id=>id!==owner))];
-    if(recipients.length){const people=await client.query('SELECT id,role FROM users WHERE id=ANY($1::uuid[]) AND active=true', [recipients]);if(people.rows.length!==recipients.length||people.rows.some(x=>x.role!=='staff'))throw Object.assign(new Error('Chỉ được chia cho nhân viên Staff đang hoạt động.'),{status:400});}
+    if(recipients.length){const people=await client.query('SELECT id,role,resignation_pending AS pending FROM users WHERE id=ANY($1::uuid[]) AND active=true', [recipients]);if(people.rows.length!==recipients.length||people.rows.some(x=>x.role!=='staff'||x.pending))throw Object.assign(new Error('Chỉ được chia cho nhân viên Staff đang hoạt động và chưa trong quy trình nghỉ việc.'),{status:400});}
     const group=recipients.length?crypto.randomUUID():null;const all=[owner,...recipients];const each=Math.floor(amountVnd/all.length);let remainder=amountVnd-each*all.length;const createdOrderIds:string[]=[];
     for(const id of all){const assigned=each+(remainder>0?1:0);if(remainder>0)remainder--;const created=await client.query(`INSERT INTO orders(tracking_code,owner_user_id,amount_vnd,status,invoice_status,share_group_id,created_by,delivered_at) VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $4='delivered' THEN now() ELSE NULL END) RETURNING id`,[trackingCode,id,assigned,status,invoiceStatus,group,actor.id]);createdOrderIds.push(created.rows[0].id);}
     await client.query(`INSERT INTO employee_order_notifications(user_id,source_type,source_id,title,description) SELECT id,'order',$1,$2,$3 FROM users WHERE active=true AND role IN ('staff','manager') ON CONFLICT(user_id,source_type,source_id) DO NOTHING`,[group||createdOrderIds[0],`Đơn mới: ${trackingCode}`,`Giá trị ${new Intl.NumberFormat('vi-VN').format(amountVnd)} đ · do ${actor.displayName} tạo.`]);
@@ -271,7 +303,7 @@ app.delete('/api/users/:id',roles('admin'),asyncRoute(async(req,res)=>{
   if(req.params.id===req.session.user!.id)return res.status(400).json({error:'Không thể xóa tài khoản đang sử dụng.'});
   const admin=(await pool.query('SELECT password_hash FROM users WHERE id=$1',[req.session.user!.id])).rows[0];
   if(!await bcrypt.compare(b.data.adminPassword,admin.password_hash))return res.status(403).json({error:'Mật khẩu xác nhận không đúng.'});
-  const result=await pool.query("UPDATE users SET active=false WHERE id=$1 AND role<>'admin' RETURNING id",[req.params.id]);
+  const result=await pool.query("UPDATE users SET active=false WHERE id=$1 AND role<>'admin' AND resignation_pending=false RETURNING id",[req.params.id]);
   if(!result.rowCount)return res.status(404).json({error:'Không tìm thấy tài khoản.'});
   res.status(204).end();
 }));
@@ -310,13 +342,13 @@ app.put('/api/schedules/import',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({entries:z.array(z.object({workDate:dateSchema,shift:z.enum(['morning','afternoon']),userIds:z.array(z.string().uuid()).max(20)})).max(70)}).safeParse(req.body);
   if(!b.success)return res.status(400).json({error:'Dữ liệu lịch Excel không hợp lệ.'});
   const assigned=new Set<string>();for(const entry of b.data.entries)for(const id of entry.userIds){const key=`${entry.workDate}|${id}`;if(assigned.has(key))return res.status(400).json({error:'Một nhân viên đang được xếp hai ca trong cùng ngày. Hãy sửa lịch Excel rồi nhập lại.'});assigned.add(key)}
-  const ids=[...new Set(b.data.entries.flatMap(e=>e.userIds))];if(ids.length){const people=await pool.query("SELECT id FROM users WHERE id=ANY($1::uuid[]) AND active=true AND role IN ('staff','manager')",[ids]);if(people.rows.length!==ids.length)return res.status(400).json({error:'Tệp có nhân viên không tồn tại hoặc tài khoản đã bị khóa.'})}
+  const ids=[...new Set(b.data.entries.flatMap(e=>e.userIds))];if(ids.length){const people=await pool.query("SELECT id FROM users WHERE id=ANY($1::uuid[]) AND active=true AND resignation_pending=false AND role IN ('staff','manager')",[ids]);if(people.rows.length!==ids.length)return res.status(400).json({error:'Tệp có nhân viên không tồn tại hoặc tài khoản đã bị khóa.'})}
   const client=await pool.connect();try{await client.query('BEGIN');for(const entry of b.data.entries)for(const id of entry.userIds)await client.query(`INSERT INTO work_schedules(user_id,work_date,shift,created_by) VALUES($1,$2::date,$3,$4) ON CONFLICT(user_id,work_date) DO UPDATE SET shift=EXCLUDED.shift,created_by=EXCLUDED.created_by`,[id,entry.workDate,entry.shift,req.session.user!.id]);await client.query('COMMIT');res.json({assigned:assigned.size,slots:b.data.entries.length})}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
 }));
 app.put('/api/schedules',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({userIds:z.array(z.string().uuid()).max(20),workDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),shift:z.enum(['morning','afternoon'])}).safeParse(req.body);
   if(!b.success)return res.status(400).json({error:'Lịch làm việc không hợp lệ.'});
-  const people=await pool.query("SELECT id FROM users WHERE id=ANY($1::uuid[]) AND active=true AND role IN ('staff','manager')",[b.data.userIds]);if(people.rows.length!==new Set(b.data.userIds).size)return res.status(400).json({error:'Danh sách có tài khoản không hợp lệ hoặc đã bị khóa.'});
+  const people=await pool.query("SELECT id FROM users WHERE id=ANY($1::uuid[]) AND active=true AND resignation_pending=false AND role IN ('staff','manager')",[b.data.userIds]);if(people.rows.length!==new Set(b.data.userIds).size)return res.status(400).json({error:'Danh sách có tài khoản không hợp lệ hoặc đã bị khóa.'});
   const client=await pool.connect();try{await client.query('BEGIN');for(const id of b.data.userIds)await client.query(`INSERT INTO work_schedules(user_id,work_date,shift,created_by) VALUES($1,$2::date,$3,$4) ON CONFLICT(user_id,work_date) DO UPDATE SET shift=EXCLUDED.shift,created_by=EXCLUDED.created_by`,[id,b.data.workDate,b.data.shift,req.session.user!.id]);await client.query('COMMIT');res.json({ok:true});}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
 }));
 app.delete('/api/schedules/week',roles('admin'),asyncRoute(async(req,res)=>{const b=z.object({weekStart:z.string().regex(/^\d{4}-\d{2}-\d{2}$/)}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Tuần cần xóa lịch không hợp lệ.'});const r=await pool.query('DELETE FROM work_schedules WHERE work_date >= $1::date AND work_date < $1::date+7 RETURNING id',[b.data.weekStart]);res.json({deleted:r.rowCount||0});}));
@@ -374,14 +406,14 @@ app.post('/api/payroll/penalties',roles('admin'),asyncRoute(async(req,res)=>{
   if(!b.success)return res.status(400).json({error:'Chọn nhân viên, lỗi vi phạm và ngày vi phạm hợp lệ.'});
   const p=b.data,type=penaltyTypes.find(t=>t.key===p.typeKey);if(!type)return res.status(400).json({error:'Loại vi phạm không hợp lệ.'});if(type.fineAmount===null&&(p.fineAmount===undefined||p.fineAmount<=0))return res.status(400).json({error:'Nhập số tiền đền bù do admin xác định.'});
   if(p.compensationAmount>0&&p.typeKey!=='wrong_package')return res.status(400).json({error:'Khoản đền bù đơn hàng chỉ áp dụng cho lỗi Gói sai / gói thiếu.'});
-  const fineAmount=(type.fineAmount===null?p.fineAmount!:type.fineAmount)+p.compensationAmount,exists=await pool.query("SELECT id FROM users WHERE id=$1 AND role IN ('staff','manager') AND active=true",[p.userId]);if(!exists.rowCount)return res.status(404).json({error:'Không tìm thấy nhân viên.'});
+  const fineAmount=(type.fineAmount===null?p.fineAmount!:type.fineAmount)+p.compensationAmount,exists=await pool.query("SELECT id FROM users WHERE id=$1 AND role IN ('staff','manager') AND active=true AND resignation_pending=false",[p.userId]);if(!exists.rowCount)return res.status(404).json({error:'Không tìm thấy nhân viên.'});
   const {rows}=await pool.query(`INSERT INTO payroll_penalties(user_id,period_start,violation_date,description,note,points,fine_amount_vnd,created_by) VALUES($1,date_trunc('month',now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date,$2::date,$3,$4,$5,$6,$7) RETURNING id`,[p.userId,p.violationDate,type.name,p.note,type.points,fineAmount,req.session.user!.id]);res.status(201).json({ok:true,id:rows[0].id});
 }));
 app.delete('/api/payroll/penalties/:id',roles('admin'),asyncRoute(async(req,res)=>{const {rowCount}=await pool.query('DELETE FROM payroll_penalties WHERE id=$1',[req.params.id]);if(!rowCount)return res.status(404).json({error:'Không tìm thấy khoản phạt.'});res.status(204).end()}));
 app.put('/api/payroll/:userId',roles('admin'),asyncRoute(async(req,res)=>{
   const b=z.object({month:z.number().int().min(1).max(12),year:z.number().int().min(2020).max(2100),workShiftsOverride:z.number().int().min(0).max(100).nullable().default(null),baseOverride:z.number().int().nonnegative().nullable().default(null),completionRate:z.number().int().min(0).max(100).default(100),otherIncome:z.number().int().nonnegative().default(0),latePenalty:z.number().int().nonnegative().default(0),lossPenalty:z.number().int().nonnegative().default(0),insurance:z.number().int().nonnegative().default(0),advance:z.number().int().nonnegative().default(0),holdback:z.number().int().nonnegative().default(0),holdbackOverride:z.boolean().default(false)}).safeParse(req.body);
   if(!b.success)return res.status(400).json({error:'Các khoản lương phải là số không âm; tỷ lệ hoàn thành từ 0 đến 300%.'});
-  const exists=await pool.query("SELECT id FROM users WHERE id=$1 AND role IN ('staff','manager') AND active=true",[req.params.userId]);if(!exists.rowCount)return res.status(404).json({error:'Không tìm thấy nhân viên.'});const p=b.data;const period=`${p.year}-${String(p.month).padStart(2,'0')}-01`;const storedCompletionRate=p.completionRate;
+  const exists=await pool.query("SELECT id,resignation_pending AS pending,to_char(resignation_period_start,'YYYY-MM-DD') AS final_period FROM users WHERE id=$1 AND role IN ('staff','manager') AND active=true",[req.params.userId]);if(!exists.rowCount)return res.status(404).json({error:'Không tìm thấy nhân viên.'});const p=b.data;const period=`${p.year}-${String(p.month).padStart(2,'0')}-01`;if(exists.rows[0].pending&&exists.rows[0].final_period===period)return res.status(409).json({error:'Kỳ lương cuối đã được chốt và đang chờ nhân viên xác nhận.'});const storedCompletionRate=p.completionRate;
   await pool.query(`INSERT INTO payroll_adjustments(user_id,period_start,work_shifts_override,base_override_vnd,completion_rate,other_income_vnd,late_penalty_vnd,loss_penalty_vnd,insurance_vnd,advance_vnd,holdback_vnd,holdback_override) VALUES($1,$2::date,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(user_id,period_start) DO UPDATE SET work_shifts_override=EXCLUDED.work_shifts_override,base_override_vnd=EXCLUDED.base_override_vnd,completion_rate=EXCLUDED.completion_rate,other_income_vnd=EXCLUDED.other_income_vnd,late_penalty_vnd=EXCLUDED.late_penalty_vnd,loss_penalty_vnd=EXCLUDED.loss_penalty_vnd,insurance_vnd=EXCLUDED.insurance_vnd,advance_vnd=EXCLUDED.advance_vnd,holdback_vnd=EXCLUDED.holdback_vnd,holdback_override=payroll_adjustments.holdback_override OR EXCLUDED.holdback_override,updated_at=now()`,[req.params.userId,period,p.workShiftsOverride,p.baseOverride,storedCompletionRate,p.otherIncome,p.latePenalty,p.lossPenalty,p.insurance,p.advance,p.holdback,p.holdbackOverride]);res.json({ok:true});
 }));
 app.post('/api/tasks',roles('admin'),asyncRoute(async(req,res)=>{
