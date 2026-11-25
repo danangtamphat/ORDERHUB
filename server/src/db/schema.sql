@@ -13,6 +13,12 @@ CREATE TABLE IF NOT EXISTS users (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_email citext;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_grade smallint NOT NULL DEFAULT 2 CHECK (employee_grade BETWEEN 1 AND 3);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS hourly_rate_override_vnd integer CHECK (hourly_rate_override_vnd > 0);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS resignation_pending boolean NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS resignation_period_start date;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS resignation_period_end date;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS resignation_final_salary_vnd bigint CHECK (resignation_final_salary_vnd BETWEEN -1000000000 AND 1000000000);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS resignation_started_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS resignation_salary_confirmed_at timestamptz;
 CREATE TABLE IF NOT EXISTS employee_profiles (
   user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   full_name text NOT NULL,
