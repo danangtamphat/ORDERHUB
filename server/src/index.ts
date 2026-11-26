@@ -317,11 +317,15 @@ app.get('/api/tasks',asyncRoute(async(req,res)=>{
   const {rows}=await pool.query(`SELECT t.id,t.assignee_user_id AS "assigneeUserId",u.username AS "assigneeUsername",u.display_name AS "assigneeName",t.work_type AS "workType",t.title,t.description,to_char(t.deadline,'YYYY-MM-DD') AS deadline,t.completion_submitted_at AS "completionSubmittedAt",t.completed_at AS "completedAt",t.created_at AS "createdAt" FROM assigned_tasks t JOIN users u ON u.id=t.assignee_user_id ${where.length?'WHERE '+where.join(' AND '):''} ORDER BY t.deadline,t.created_at DESC`,args);
   res.json({tasks:rows});
 }));
-app.get('/api/tasks/review-notifications',asyncRoute(async(req,res)=>{
-  if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});
-  if(req.session.user.role==='admin')return res.json({notifications:[]});
-  const {rows}=await pool.query(`WITH pending AS (SELECT id FROM task_review_notifications WHERE user_id=$1 AND read_at IS NULL ORDER BY created_at FOR UPDATE SKIP LOCKED), marked AS (UPDATE task_review_notifications n SET read_at=now() FROM pending p WHERE n.id=p.id RETURNING n.id,n.task_title AS "taskTitle",n.decision,n.created_at AS "createdAt") SELECT * FROM marked ORDER BY "createdAt" DESC`,[req.session.user.id]);
+app.get('/api/tasks/review-notifications',roles('staff','manager'),asyncRoute(async(req,res)=>{
+  const {rows}=await pool.query(`SELECT id,task_title AS "taskTitle",decision,created_at AS "createdAt" FROM task_review_notifications WHERE user_id=$1 AND read_at IS NULL ORDER BY created_at DESC LIMIT 50`,[req.session.user!.id]);
   res.json({notifications:rows});
+}));
+app.post('/api/tasks/review-notifications/acknowledge',roles('staff','manager'),asyncRoute(async(req,res)=>{
+  const b=z.object({ids:z.array(z.string().uuid()).min(1).max(50)}).safeParse(req.body);
+  if(!b.success)return res.status(400).json({error:'Danh sách thông báo cần xác nhận không hợp lệ.'});
+  const {rowCount}=await pool.query(`UPDATE task_review_notifications SET read_at=now() WHERE user_id=$1 AND id=ANY($2::uuid[]) AND read_at IS NULL`,[req.session.user!.id,b.data.ids]);
+  res.json({acknowledged:rowCount||0});
 }));
 app.get('/api/tasks/assignment-notifications',asyncRoute(async(req,res)=>{
   if(!req.session.user)return res.status(401).json({error:'Vui lòng đăng nhập.'});
