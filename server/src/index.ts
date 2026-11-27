@@ -489,43 +489,6 @@ app.get('/api/reminders',asyncRoute(async(req,res)=>{if(!req.session.user)return
 app.post('/api/reminders/claim',roles('staff','manager'),asyncRoute(async(req,res)=>{const b=z.object({slot:z.enum(['09','14'])}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Khung giờ nhắc việc không hợp lệ.'});const {rowCount}=await pool.query("INSERT INTO reminder_prompts(user_id,prompt_date,slot) VALUES($1,(now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date,$2) ON CONFLICT(user_id,prompt_date,slot) DO NOTHING",[req.session.user!.id,b.data.slot]);res.json({shouldShow:Boolean(rowCount)});}));
 app.post('/api/reminders',roles('admin'),asyncRoute(async(req,res)=>{const b=z.object({userIds:z.array(z.string().uuid()).max(200).default([]),title:z.string().trim().min(1).max(160),description:z.string().max(500).default('')}).safeParse(req.body);if(!b.success)return res.status(400).json({error:'Thông tin nhắc việc không hợp lệ.'});const client=await pool.connect();try{await client.query('BEGIN');let recipients:({id:string;displayName:string})[]=[];if(b.data.userIds.length){const result=await client.query("SELECT id,display_name AS \"displayName\" FROM users WHERE id=ANY($1::uuid[]) AND active=true AND role<>'admin'",[b.data.userIds]);if(result.rows.length!==new Set(b.data.userIds).size){await client.query('ROLLBACK');return res.status(400).json({error:'Danh sách nhân viên áp dụng không hợp lệ.'})}recipients=result.rows;}const rows=[];for(const recipient of recipients.length?recipients:[{id:null as unknown as string,displayName:''}]){const result=await client.query('INSERT INTO daily_reminders(user_id,title,description,created_by) VALUES($1,$2,$3,$4) RETURNING id,user_id AS "userId",title,description,created_at AS "createdAt"',[recipient.id,b.data.title,b.data.description,req.session.user!.id]);rows.push(result.rows[0]);}await client.query('COMMIT');res.status(201).json({reminders:rows});}catch(error){await client.query('ROLLBACK');throw error}finally{client.release()}}));
 app.delete('/api/reminders/:id',roles('admin'),asyncRoute(async(req,res)=>{const r=await pool.query('UPDATE daily_reminders SET active=false WHERE id=$1 AND active=true RETURNING id',[req.params.id]);if(!r.rowCount)return res.status(404).json({error:'Không tìm thấy nhắc việc.'});res.status(204).end();}));
-const dealerReceivableNames=['Mai Linh','ONVIZ','Thành Nam'] as const;
-const dealerReceivableSchema=z.object({
-  dealer:z.enum(dealerReceivableNames),
-  entryDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  description:z.string().trim().min(1).max(300),
-  quantity:z.number().min(0).nullable().optional(),
-  unitPrice:z.number().min(0).nullable().optional(),
-  debitAmount:z.number().min(0),
-  creditAmount:z.number().min(0)
-}).superRefine((v,ctx)=>{
-  if((v.quantity==null)!==(v.unitPrice==null))ctx.addIssue({code:z.ZodIssueCode.custom,message:'Số lượng và đơn giá cần nhập cùng nhau.',path:['quantity']});
-  if(v.debitAmount>0&&v.creditAmount>0)ctx.addIssue({code:z.ZodIssueCode.custom,message:'Một dòng chỉ được ghi Nợ hoặc Có.',path:['creditAmount']});
-  if(v.debitAmount===0&&v.creditAmount===0)ctx.addIssue({code:z.ZodIssueCode.custom,message:'Vui lòng nhập số phát sinh Nợ hoặc Có.',path:['debitAmount']});
-});
-app.get('/api/dealer-receivables',roles('admin'),asyncRoute(async(req,res)=>{
-  const dealer=String(req.query.dealer||'');
-  if(dealer&&!dealerReceivableNames.includes(dealer as typeof dealerReceivableNames[number]))return res.status(400).json({error:'Đại lý không hợp lệ.'});
-  const args:unknown[]=[];let where='';
-  if(dealer){args.push(dealer);where='WHERE dealer=$1'}
-  const {rows}=await pool.query(`SELECT id,dealer,to_char(entry_date,'YYYY-MM-DD') AS "entryDate",description,quantity,unit_price AS "unitPrice",debit_amount AS "debitAmount",credit_amount AS "creditAmount",created_at AS "createdAt",SUM(debit_amount-credit_amount) OVER(PARTITION BY dealer ORDER BY entry_date,created_at,id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS balance FROM dealer_receivable_entries ${where} ORDER BY entry_date DESC,created_at DESC,id DESC`,args);
-  const {rows:totals}=await pool.query('SELECT dealer,COALESCE(SUM(debit_amount-credit_amount),0) AS balance FROM dealer_receivable_entries GROUP BY dealer');
-  res.json({entries:rows,balances:Object.fromEntries(dealerReceivableNames.map(name=>[name,Number(totals.find((row:{dealer:string})=>row.dealer===name)?.balance||0)]))});
-}));
-app.post('/api/dealer-receivables',roles('admin'),asyncRoute(async(req,res)=>{
-  const b=dealerReceivableSchema.safeParse(req.body);if(!b.success)return res.status(400).json({error:b.error.issues[0]?.message||'Dữ liệu công nợ chưa hợp lệ.'});
-  const v=b.data;const {rows}=await pool.query(`INSERT INTO dealer_receivable_entries(dealer,entry_date,description,quantity,unit_price,debit_amount,credit_amount,created_by) VALUES($1,$2::date,$3,$4,$5,$6,$7,$8) RETURNING id`,[v.dealer,v.entryDate,v.description,v.quantity??null,v.unitPrice??null,v.debitAmount,v.creditAmount,req.session.user!.id]);
-  res.status(201).json({id:rows[0].id});
-}));
-app.patch('/api/dealer-receivables/:id',roles('admin'),asyncRoute(async(req,res)=>{
-  const id=z.string().uuid().safeParse(req.params.id);const b=dealerReceivableSchema.safeParse(req.body);if(!id.success||!b.success)return res.status(400).json({error:b.success?'Mã dòng công nợ không hợp lệ.':b.error.issues[0]?.message||'Dữ liệu công nợ chưa hợp lệ.'});
-  const v=b.data;const result=await pool.query(`UPDATE dealer_receivable_entries SET dealer=$1,entry_date=$2::date,description=$3,quantity=$4,unit_price=$5,debit_amount=$6,credit_amount=$7,updated_at=now() WHERE id=$8`,[v.dealer,v.entryDate,v.description,v.quantity??null,v.unitPrice??null,v.debitAmount,v.creditAmount,id.data]);
-  if(!result.rowCount)return res.status(404).json({error:'Không tìm thấy dòng công nợ.'});res.json({ok:true});
-}));
-app.delete('/api/dealer-receivables/:id',roles('admin'),asyncRoute(async(req,res)=>{
-  const id=z.string().uuid().safeParse(req.params.id);if(!id.success)return res.status(400).json({error:'Mã dòng công nợ không hợp lệ.'});
-  const result=await pool.query('DELETE FROM dealer_receivable_entries WHERE id=$1',[id.data]);if(!result.rowCount)return res.status(404).json({error:'Không tìm thấy dòng công nợ.'});res.status(204).end();
-}));
 const warrantyDealers=['ONVIZ','An Camera','GOGA','Thành Nam','Mai Linh','Khác'] as const;
 async function resolveInventorySkus(codes:string[]){
   const keys=[...new Set(codes.map(code=>code.trim().toLocaleLowerCase()))];
