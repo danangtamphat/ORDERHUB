@@ -13,7 +13,7 @@ type ReturnOrder = {
 type Props = { onError: (message: string) => void; onNotice: (message: string) => void };
 const API = '/api';
 const moneySafeText = (value: unknown) => String(value ?? '').trim();
-const normalizeHeader = (value: unknown) => moneySafeText(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const normalizeHeader = (value: unknown) => moneySafeText(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 export default function ReturnReconciliationPage({ onError, onNotice }: Props) {
   const [orders, setOrders] = useState<ReturnOrder[]>([]);
