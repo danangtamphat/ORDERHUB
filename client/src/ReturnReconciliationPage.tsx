@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Eye, FileSpreadsheet, ImagePlus, RefreshCw, Upload } from 'lucide-react';
+import { Check, FileSpreadsheet, ImagePlus, RefreshCw, Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 type ReturnOrder = {
@@ -9,6 +9,7 @@ type ReturnOrder = {
   source: string;
   products: string[];
   confirmedAt: string | null;
+  photoSha256: string | null;
 };
 type Props = { onError: (message: string) => void; onNotice: (message: string) => void };
 const API = '/api';
@@ -20,6 +21,7 @@ export default function ReturnReconciliationPage({ onError, onNotice }: Props) {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Record<string, File>>({});
+  const [selectedHashes, setSelectedHashes] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -104,6 +106,24 @@ export default function ReturnReconciliationPage({ onError, onNotice }: Props) {
     return a.orderCode.localeCompare(b.orderCode);
   }), [orders]);
 
+  const selectImage = async (orderId: string, file?: File) => {
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { onError('Ảnh cần có định dạng JPG, PNG hoặc WebP.'); return; }
+    if (file.size > 5 * 1024 * 1024) { onError('Ảnh tối đa 5 MB.'); return; }
+    try {
+      const bytes = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest('SHA-256', bytes);
+      const hash = [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('');
+      const used = orders.some(order => order.id !== orderId && order.photoSha256 === hash)
+        || Object.entries(selectedHashes).some(([id, selectedHash]) => id !== orderId && selectedHash === hash);
+      if (used) { onError('Ảnh này đã được dùng cho một đơn khác. Vui lòng chọn ảnh khác.'); return; }
+      setSelectedFiles(current => ({ ...current, [orderId]: file }));
+      setSelectedHashes(current => ({ ...current, [orderId]: hash }));
+    } catch {
+      onError('Không thể kiểm tra ảnh. Vui lòng thử chọn lại.');
+    }
+  };
+
   const confirmReturn = async (order: ReturnOrder) => {
     const file = selectedFiles[order.id];
     if (!file) { onError('Vui lòng tải ảnh xác nhận cho đơn này trước.'); return; }
@@ -117,6 +137,7 @@ export default function ReturnReconciliationPage({ onError, onNotice }: Props) {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Không thể xác nhận đơn hoàn.');
       setSelectedFiles(current => { const next = { ...current }; delete next[order.id]; return next; });
+      setSelectedHashes(current => { const next = { ...current }; delete next[order.id]; return next; });
       onNotice(`Đã lưu ảnh xác nhận cho đơn ${order.orderCode}.`);
       await refresh();
     } catch (error) {
@@ -136,15 +157,15 @@ export default function ReturnReconciliationPage({ onError, onNotice }: Props) {
       </div>
     </div>
     <div className="return-reconciliation-summary"><b>{orders.length}</b> đơn trong danh sách <span>•</span> <b>{orders.filter(order => order.confirmedAt).length}</b> đã có ảnh xác nhận</div>
-    <div className="table-wrap"><table className="data-table return-reconciliation-table"><thead><tr><th>Mã đơn hàng</th><th>Mã vận đơn</th><th>Nguồn đơn</th><th>Sản phẩm</th><th>Xác nhận nhận hàng</th></tr></thead>
-      <tbody>{ordered.map(order => <tr key={order.id}>
-        <td className="return-order-code">{order.orderCode}</td><td>{order.trackingCode}</td><td>{order.source}</td>
+    <div className="table-wrap"><table className="data-table return-reconciliation-table"><thead><tr><th>STT</th><th>Mã đơn hàng</th><th>Mã vận đơn</th><th>Nguồn đơn</th><th>Sản phẩm</th><th>Xác nhận nhận hàng</th></tr></thead>
+      <tbody>{ordered.map((order, index) => <tr key={order.id}>
+        <td className="return-order-number">{index + 1}</td><td className="return-order-code">{order.orderCode}</td><td>{order.trackingCode}</td><td>{order.source}</td>
         <td className="return-products">{order.products.join(' · ')}</td>
-        <td>{order.confirmedAt ? <button className="return-proof-view" onClick={() => window.open(`${API}/return-reconciliation/orders/${order.id}/photo`, '_blank', 'noopener,noreferrer')}><Eye size={15}/> Đã xác nhận · Xem ảnh</button> :
-          <div className="return-proof-actions"><label className="btn-secondary return-file-button"><ImagePlus size={15}/>{selectedFiles[order.id] ? 'Đã chọn ảnh' : 'Chọn ảnh'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.target.files?.[0]; if (file) setSelectedFiles(current => ({ ...current, [order.id]: file })); }}/></label><button className="btn-primary" disabled={!selectedFiles[order.id] || confirming===order.id} onClick={() => void confirmReturn(order)}>{confirming===order.id?'Đang lưu...':<><Upload size={15}/> Xác nhận</>}</button></div>}
+        <td>{order.confirmedAt ? <a className="return-proof-image-link" href={`${API}/return-reconciliation/orders/${order.id}/photo`} target="_blank" rel="noreferrer"><img className="return-proof-thumbnail" src={`${API}/return-reconciliation/orders/${order.id}/photo`} alt={`Ảnh xác nhận đơn ${order.orderCode}`} loading="lazy"/><span>Đã xác nhận · Xem ảnh lớn</span></a> :
+          <div className="return-proof-actions"><label className="btn-secondary return-file-button"><ImagePlus size={15}/>{selectedFiles[order.id] ? 'Đã chọn ảnh' : 'Chọn ảnh'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.target.files?.[0]; if (file) void selectImage(order.id, file); event.currentTarget.value = ''; }}/></label><button className="btn-primary" disabled={!selectedFiles[order.id] || confirming===order.id} onClick={() => void confirmReturn(order)}>{confirming===order.id?'Đang lưu...':<><Upload size={15}/> Xác nhận</>}</button></div>}
         </td></tr>)}
-        {!loading && !ordered.length && <tr><td colSpan={5} className="empty-cell">Chưa có đơn hoàn. Hãy nhập file Excel để bắt đầu.</td></tr>}
-        {loading && <tr><td colSpan={5} className="empty-cell">Đang tải danh sách...</td></tr>}
+        {!loading && !ordered.length && <tr><td colSpan={6} className="empty-cell">Chưa có đơn hoàn. Hãy nhập file Excel để bắt đầu.</td></tr>}
+        {loading && <tr><td colSpan={6} className="empty-cell">Đang tải danh sách...</td></tr>}
       </tbody></table></div>
     <p className="return-reconciliation-note">Ảnh JPG, PNG hoặc WebP; tối đa 5 MB mỗi đơn. Sau khi xác nhận, bản ghi và ảnh được lưu để nhân viên cùng xem.</p>
   </section>;
