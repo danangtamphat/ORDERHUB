@@ -19,7 +19,7 @@ if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) throw
 app.disable('x-powered-by');
 app.use(helmet());
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173', credentials: true }));
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '2mb' }));
 app.use(session({
   store: new PgStore({ pool, createTableIfMissing: true }),
   name: 'orderhub.sid', secret: process.env.SESSION_SECRET!, resave: false, saveUninitialized: false,
@@ -586,6 +586,32 @@ async function resolveInventorySkus(codes:string[]){
   const {rows}=await pool.query('SELECT sku,btrim(name) AS name FROM inventory_items WHERE lower(btrim(sku))=ANY($1::text[])',[keys]);
   return new Map<string,{sku:string;name:string}>(rows.map((row:{sku:string;name:string})=>[row.sku.trim().toLocaleLowerCase(),row]));
 }
+const returnOrderImportSchema=z.object({orders:z.array(z.object({orderCode:z.string().trim().min(1).max(100),trackingCode:z.string().trim().min(1).max(100),source:z.string().trim().min(1).max(300),products:z.array(z.string().trim().min(1).max(1000)).min(1).max(100)})).min(1).max(10000)});
+app.get('/api/return-reconciliation/orders',roles('admin','manager','staff'),asyncRoute(async(_req,res)=>{
+ const {rows}=await pool.query(`SELECT id,order_code AS "orderCode",tracking_code AS "trackingCode",source,products,confirmed_at AS "confirmedAt" FROM return_reconciliation_orders ORDER BY (confirmed_at IS NULL) DESC,imported_at DESC,order_code`);
+ res.json({orders:rows});
+}));
+app.post('/api/return-reconciliation/import',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
+ const parsed=returnOrderImportSchema.safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Tệp cần có mã đơn hàng, mã vận đơn, nguồn đơn và sản phẩm hợp lệ.'});
+ const unique=new Map<string,typeof parsed.data.orders[number]>();
+ for(const order of parsed.data.orders){const key=order.trackingCode.trim().toUpperCase();const previous=unique.get(key);if(previous){if(previous.orderCode!==order.orderCode)return res.status(400).json({error:'Một mã vận đơn đang gắn với nhiều mã đơn hàng trong tệp.'});previous.products=[...new Set([...previous.products,...order.products])];}else unique.set(key,{...order,trackingCode:key,products:[...new Set(order.products)]});}
+ const client=await pool.connect();try{await client.query('BEGIN');for(const order of unique.values())await client.query(`INSERT INTO return_reconciliation_orders(order_code,tracking_code,source,products,imported_by) VALUES($1,$2,$3,$4::jsonb,$5) ON CONFLICT(tracking_code) DO UPDATE SET order_code=EXCLUDED.order_code,source=EXCLUDED.source,products=EXCLUDED.products,updated_at=now()`,[order.orderCode,order.trackingCode,order.source,JSON.stringify(order.products),req.session.user!.id]);await client.query('COMMIT');res.json({imported:unique.size});}catch(error){await client.query('ROLLBACK');throw error}finally{client.release()}
+}));
+app.post('/api/return-reconciliation/orders/:id/confirm',roles('admin','manager','staff'),express.raw({type:()=>true,limit:'5mb'}),asyncRoute(async(req,res)=>{
+ const id=z.string().uuid().safeParse(req.params.id);if(!id.success)return res.status(400).json({error:'Mã đơn không hợp lệ.'});
+ const mime=req.get('content-type')?.split(';')[0].trim().toLowerCase()||'';if(!['image/jpeg','image/png','image/webp'].includes(mime))return res.status(415).json({error:'Chỉ nhận ảnh JPG, PNG hoặc WebP.'});
+ const image=Buffer.isBuffer(req.body)?req.body:Buffer.alloc(0);if(!image.length)return res.status(400).json({error:'Vui lòng tải ảnh xác nhận.'});if(image.length>5*1024*1024)return res.status(413).json({error:'Ảnh tối đa 5 MB.'});const validImage=mime==='image/jpeg'?image[0]===0xff&&image[1]===0xd8&&image[2]===0xff:mime==='image/png'?image.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):image.subarray(0,4).toString('ascii')==='RIFF'&&image.subarray(8,12).toString('ascii')==='WEBP';if(!validImage)return res.status(415).json({error:'Nội dung tệp không đúng định dạng ảnh đã chọn.'});
+ let fileName='anh-xac-nhan';try{fileName=decodeURIComponent(req.get('x-file-name')||fileName)}catch{}fileName=fileName.replace(/[\\/\\\\\u0000-\u001f]/g,'_').slice(0,180)||'anh-xac-nhan';
+ const {rows}=await pool.query(`UPDATE return_reconciliation_orders SET confirmed_by=$1,confirmed_at=now(),photo_data=$2,photo_content_type=$3,photo_file_name=$4,updated_at=now() WHERE id=$5 AND confirmed_at IS NULL RETURNING id`,[req.session.user!.id,image,mime,fileName,id.data]);
+ if(!rows.length){const exists=await pool.query('SELECT confirmed_at FROM return_reconciliation_orders WHERE id=$1',[id.data]);return res.status(exists.rowCount?409:404).json({error:exists.rowCount?'Đơn này đã được xác nhận trước đó.':'Không tìm thấy đơn hoàn.'});}
+ res.json({ok:true});
+}));
+app.get('/api/return-reconciliation/orders/:id/photo',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
+ const id=z.string().uuid().safeParse(req.params.id);if(!id.success)return res.status(400).json({error:'Mã đơn không hợp lệ.'});
+ const {rows}=await pool.query('SELECT photo_data,photo_content_type,photo_file_name FROM return_reconciliation_orders WHERE id=$1 AND confirmed_at IS NOT NULL',[id.data]);if(!rows.length)return res.status(404).json({error:'Chưa có ảnh xác nhận.'});
+ const mime=String(rows[0].photo_content_type);const extension=mime==='image/png'?'png':mime==='image/webp'?'webp':'jpg';
+ res.setHeader('Cache-Control','private, no-store');res.setHeader('Content-Disposition',`inline; filename="anh-xac-nhan.${extension}"`);res.type(rows[0].photo_content_type).send(rows[0].photo_data);
+}));
 app.get('/api/warranties',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
   const {rows}=await pool.query(`SELECT w.id,w.created_by AS "createdBy",u.display_name AS "employeeName",w.product_code AS "productCode",w.issue,w.customer_phone AS "customerPhone",w.warranty_valid AS "warrantyValid",w.dealer,to_char(w.received_at AT TIME ZONE 'Asia/Ho_Chi_Minh','YYYY-MM-DD HH24:MI:SS') AS "receivedAt",to_char((w.received_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date+10,'YYYY-MM-DD') AS deadline,w.customer_return_tracking_code AS "customerReturnTrackingCode",to_char(w.customer_returned_at,'YYYY-MM-DD') AS "customerReturnedAt",EXISTS(SELECT 1 FROM warranty_case_dispatches d WHERE d.case_id=w.id) AS "sentToDealer" FROM warranty_cases w JOIN users u ON u.id=w.created_by ORDER BY w.received_at DESC`);
   res.json({cases:rows});
