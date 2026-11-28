@@ -587,6 +587,10 @@ async function resolveInventorySkus(codes:string[]){
   return new Map<string,{sku:string;name:string}>(rows.map((row:{sku:string;name:string})=>[row.sku.trim().toLocaleLowerCase(),row]));
 }
 const returnOrderImportSchema=z.object({orders:z.array(z.object({orderCode:z.string().trim().min(1).max(100),trackingCode:z.string().trim().min(1).max(100),source:z.string().trim().min(1).max(300),products:z.array(z.string().trim().min(1).max(1000)).min(1).max(100)})).min(1).max(10000)});
+app.delete('/api/return-reconciliation/orders',roles('admin'),asyncRoute(async(req,res)=>{
+ const parsed=z.object({ids:z.array(z.string().uuid()).min(1).max(5000)}).safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Vui lòng chọn ít nhất một đơn hoàn hợp lệ.'});
+ const ids=[...new Set(parsed.data.ids)];const {rowCount}=await pool.query('DELETE FROM return_reconciliation_orders WHERE id=ANY($1::uuid[])',[ids]);res.json({deleted:rowCount||0});
+}));
 app.get('/api/return-reconciliation/orders',roles('admin','manager','staff'),asyncRoute(async(_req,res)=>{
  const {rows}=await pool.query(`SELECT id,order_code AS "orderCode",tracking_code AS "trackingCode",source,products,photo_sha256 AS "photoSha256",confirmed_at AS "confirmedAt" FROM return_reconciliation_orders ORDER BY (confirmed_at IS NULL) DESC,imported_at DESC,order_code`);
  const seenPhotoHashes=new Set<string>();
