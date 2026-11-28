@@ -55,7 +55,61 @@ app.get('/api/web-orders',roles('admin','manager','staff'),asyncRoute(async(_req
   const {rows}=await pool.query(`SELECT id,source_order_id AS "sourceOrderId",customer_name AS "customerName",customer_phone AS "customerPhone",shipping_address AS "shippingAddress",items,total_vnd AS "totalVnd",status,tracking_code AS "trackingCode",created_at AS "createdAt" FROM camera_web_orders ORDER BY CASE status WHEN 'new' THEN 0 WHEN 'contacted' THEN 1 ELSE 2 END,created_at DESC LIMIT 500`);res.json({orders:rows});
 }));
 app.patch('/api/web-orders/:id/link-order',roles('admin','manager','staff'),asyncRoute(async(req,res)=>{
-  const body=z.object({trackingCode:z.string().trim().regex(/^PKE[A-Z0-9-]{2,27}$/i)}).safeParse(req.body);if(!body.success)return res.status(400).json({error:'Nhập mã đơn PKE hợp lệ.'});const found=await pool.query(`SELECT tracking_code AS "trackingCode" FROM orders WHERE lower(tracking_code)=lower($1) LIMIT 1`,[body.data.trackingCode]);if(!found.rows.length)return res.status(404).json({error:'Chưa tìm thấy mã PKE này trong OrderHub. Hãy tạo đơn trước rồi nhập lại mã.'});const trackingCode=String(found.rows[0].trackingCode);const client=await pool.connect();try{await client.query('BEGIN');const linked=await client.query(`UPDATE camera_web_orders SET tracking_code=$1,status='confirmed',updated_at=now() WHERE id=$2 AND tracking_code IS NULL RETURNING id`,[trackingCode,req.params.id]);if(!linked.rows.length){await client.query('ROLLBACK');const existing=await pool.query('SELECT tracking_code AS "trackingCode" FROM camera_web_orders WHERE id=$1',[req.params.id]);return existing.rows.length?res.status(409).json({error:`Yêu cầu đã được gắn mã ${existing.rows[0].trackingCode}.`}):res.status(404).json({error:'Không tìm thấy yêu cầu đặt hàng.'});}await client.query(`DELETE FROM employee_order_notifications WHERE source_type='website' AND source_id=$1`,[req.params.id]);await client.query('COMMIT');res.json({ok:true,trackingCode})}catch(e){await client.query('ROLLBACK');const err=e as Error&{code?:string};if(err.code==='23505')return res.status(409).json({error:'Mã PKE này đã được gắn với một yêu cầu website khác.'});throw e}finally{client.release()}
+  const body=z.object({trackingCode:z.string().trim().regex(/^PKE[A-Z0-9-]{2,27}$/i),ownerUserId:z.string().uuid().optional(),shareUserIds:z.array(z.string().uuid()).max(50).optional()}).safeParse(req.body);
+  if(!body.success)return res.status(400).json({error:'Nhập mã đơn PKE hợp lệ và chọn nhân viên chia doanh thu.'});
+  const actor=req.session.user!;const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    const website=await client.query('SELECT id,total_vnd AS "totalVnd",status,tracking_code AS "trackingCode" FROM camera_web_orders WHERE id=$1 FOR UPDATE',[req.params.id]);
+    if(!website.rows.length){await client.query('ROLLBACK');return res.status(404).json({error:'Không tìm thấy yêu cầu đặt hàng.'});}
+    if(website.rows[0].status==='cancelled'){await client.query('ROLLBACK');return res.status(409).json({error:'Yêu cầu này đã bị hủy, không thể ghi nhận doanh thu.'});}
+    if(website.rows[0].trackingCode){await client.query('ROLLBACK');return res.status(409).json({error:`Yêu cầu đã gắn mã ${website.rows[0].trackingCode}.`});}
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended(lower($1),0))',[body.data.trackingCode]);
+    const existing=await client.query(`SELECT id,owner_user_id AS "ownerUserId",amount_vnd AS "amountVnd",status,invoice_status AS "invoiceStatus",share_group_id AS "shareGroupId",created_by AS "createdBy",created_at AS "createdAt",delivered_at AS "deliveredAt",admin_status AS "adminStatus",admin_reconciled AS "adminReconciled",admin_cod_amount_vnd AS "adminCodAmountVnd",reconciled_by AS "reconciledBy",reconciled_at AS "reconciledAt" FROM orders WHERE lower(tracking_code)=lower($1) ORDER BY created_at,id FOR UPDATE`,[body.data.trackingCode]);
+    const ownerUserId=actor.role==='staff'?actor.id:(body.data.ownerUserId||existing.rows[0]?.ownerUserId);
+    if(!ownerUserId){await client.query('ROLLBACK');return res.status(400).json({error:'Chọn nhân viên nhận doanh thu.'});}
+    const owner=await client.query('SELECT id,role,resignation_pending AS pending FROM users WHERE id=$1 AND active=true',[ownerUserId]);
+    if(!owner.rows[0]||owner.rows[0].role!=='staff'||owner.rows[0].pending){await client.query('ROLLBACK');return res.status(400).json({error:'Nhân viên phụ trách phải là tài khoản Staff đang hoạt động.'});}
+    const recipients=[...new Set((body.data.shareUserIds||[]).filter(id=>id!==ownerUserId))];
+    if(recipients.length){const people=await client.query('SELECT id,role,resignation_pending AS pending FROM users WHERE id=ANY($1::uuid[]) AND active=true',[recipients]);if(people.rows.length!==recipients.length||people.rows.some(person=>person.role!=='staff'||person.pending)){await client.query('ROLLBACK');return res.status(400).json({error:'Chỉ được chia doanh thu cho nhân viên Staff đang hoạt động.'});}}
+    const desired=[ownerUserId,...recipients];let grossAmountVnd=0;let createdOrder=false;
+    if(!existing.rows.length){
+      grossAmountVnd=Number(website.rows[0].totalVnd);
+      if(!Number.isSafeInteger(grossAmountVnd)||grossAmountVnd<10000||grossAmountVnd>50000000){await client.query('ROLLBACK');return res.status(400).json({error:'Giá trị đơn website phải từ 10.000 đến 50.000.000 VNĐ để ghi nhận doanh thu.'});}
+      const each=Math.floor(grossAmountVnd/desired.length);let remainder=grossAmountVnd-each*desired.length;
+      if(each<10000){await client.query('ROLLBACK');return res.status(400).json({error:'Giá trị đơn quá thấp để chia cho số nhân viên đã chọn.'});}
+      const group=desired.length>1?crypto.randomUUID():null;
+      for(const id of desired){const assigned=each+(remainder>0?1:0);if(remainder>0)remainder--;await client.query(`INSERT INTO orders(tracking_code,owner_user_id,amount_vnd,status,invoice_status,share_group_id,created_by,delivered_at) VALUES($1,$2,$3,'pending','not_issued',$4,$5,NULL)`,[body.data.trackingCode,id,assigned,group,actor.id]);}
+      createdOrder=true;
+    }else{
+      const rows=existing.rows as Array<{id:string;ownerUserId:string;amountVnd:number|string;status:string;invoiceStatus:string;shareGroupId:string|null;createdBy:string;createdAt:Date|string;deliveredAt:Date|string|null;adminStatus:string|null;adminReconciled:boolean;adminCodAmountVnd:number|null;reconciledBy:string|null;reconciledAt:Date|string|null}>;
+      grossAmountVnd=rows.reduce((sum,row)=>sum+Number(row.amountVnd),0);
+      const currentIds=[...new Set(rows.map(row=>row.ownerUserId))];
+      const groups=[...new Set(rows.map(row=>row.shareGroupId).filter((id):id is string=>Boolean(id)))];
+      if(rows.length>1&&(groups.length!==1||rows.some(row=>row.shareGroupId!==groups[0]))){await client.query('ROLLBACK');return res.status(409).json({error:'Cách chia doanh thu của mã này chưa đồng nhất. Vui lòng nhờ admin kiểm tra đơn trong OrderHub.'});}
+      const alreadyShared=rows.length>1||Boolean(rows[0].shareGroupId);
+      if(alreadyShared){
+        const exact=currentIds.length===desired.length&&currentIds.every(id=>desired.includes(id));
+        if(!exact){await client.query('ROLLBACK');return res.status(409).json({error:'Mã PKE này đã được chia doanh thu trong OrderHub. Hãy chọn đúng các nhân viên đang chia đơn rồi thử lại.'});}
+      }else{
+        const unchanged=currentIds.length===1&&currentIds[0]===ownerUserId&&recipients.length===0;
+        if(!unchanged&&rows.some(row=>row.adminReconciled)){await client.query('ROLLBACK');return res.status(409).json({error:'Đơn đã được admin đối soát; không thể đổi người nhận hoặc chia lại doanh thu.'});}
+        if(!unchanged){
+          const each=Math.floor(grossAmountVnd/desired.length);let remainder=grossAmountVnd-each*desired.length;
+          if(each<10000){await client.query('ROLLBACK');return res.status(400).json({error:'Giá trị đơn quá thấp để chia cho số nhân viên đã chọn.'});}
+          const group=desired.length>1?(rows[0].shareGroupId||crypto.randomUUID()):null;
+          await client.query('UPDATE orders SET tracking_code=$2 WHERE id=$1',[rows[0].id,`TMP${crypto.randomUUID().replaceAll('-','')}`]);
+          const firstAmount=each+(remainder>0?1:0);if(remainder>0)remainder--;
+          await client.query(`UPDATE orders SET tracking_code=$1,owner_user_id=$2,amount_vnd=$3,share_group_id=$4,updated_at=now() WHERE id=$5`,[body.data.trackingCode,ownerUserId,firstAmount,group,rows[0].id]);
+          for(let index=1;index<desired.length;index++){const assigned=each+(remainder>0?1:0);if(remainder>0)remainder--;await client.query(`INSERT INTO orders(tracking_code,owner_user_id,amount_vnd,status,invoice_status,share_group_id,created_by,delivered_at,created_at,admin_status,admin_reconciled,admin_cod_amount_vnd,reconciled_by,reconciled_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,[body.data.trackingCode,desired[index],assigned,rows[0].status,rows[0].invoiceStatus,group,rows[0].createdBy,rows[0].deliveredAt,rows[0].createdAt,rows[0].adminStatus,rows[0].adminReconciled,rows[0].adminCodAmountVnd,rows[0].reconciledBy,rows[0].reconciledAt]);}
+        }
+      }
+    }
+    const linked=await client.query(`UPDATE camera_web_orders SET tracking_code=$1,status='confirmed',updated_at=now() WHERE id=$2 AND tracking_code IS NULL RETURNING id`,[body.data.trackingCode,req.params.id]);
+    if(!linked.rowCount){await client.query('ROLLBACK');return res.status(409).json({error:'Yêu cầu đã được xử lý hoặc gắn mã khác.'});}
+    await client.query(`DELETE FROM employee_order_notifications WHERE source_type='website' AND source_id=$1`,[req.params.id]);
+    await client.query('COMMIT');res.json({ok:true,trackingCode:body.data.trackingCode,createdOrder,grossAmountVnd});
+  }catch(e){await client.query('ROLLBACK');const err=e as Error&{code?:string;status?:number};if(err.code==='23505')return res.status(409).json({error:'Mã PKE này đã được gắn với yêu cầu website khác hoặc trùng mã đơn của nhân viên.'});throw e}finally{client.release()}
 }));
 app.delete('/api/web-orders/:id',roles('admin'),asyncRoute(async(req,res)=>{const client=await pool.connect();try{await client.query('BEGIN');const deleted=await client.query('DELETE FROM camera_web_orders WHERE id=$1 RETURNING id',[req.params.id]);if(!deleted.rows.length){await client.query('ROLLBACK');return res.status(404).json({error:'Không tìm thấy yêu cầu đặt hàng.'});}await client.query(`DELETE FROM employee_order_notifications WHERE source_type='website' AND source_id=$1`,[req.params.id]);await client.query('COMMIT');res.json({ok:true})}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}}));
 app.patch('/api/web-orders/:id/status',roles('admin','staff'),asyncRoute(async(req,res)=>{
